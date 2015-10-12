@@ -1,6 +1,6 @@
 %% Script for compute regression given data and intensity label for each frame
 clear all;
-% close all;
+close all;
 
 % load data
 src = load('BP4D/same_exp_dif_sub.mat');
@@ -34,8 +34,6 @@ end
 %% define initial parameter of regression model
 rng default;
 theta0 = randn(fdim+1,1); 
-theta0 = randn(fdim+1,1); 
-theta0 = randn(fdim+1,1);
 % train regression model
 % Solving minimization problem using Matlab optimization toolbox
 options = optimset('GradObj','on');
