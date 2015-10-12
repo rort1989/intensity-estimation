@@ -34,8 +34,6 @@ end
 %% define initial parameter of regression model
 rng default;
 theta0 = randn(fdim+1,1); 
-theta0 = randn(fdim+1,1); 
-theta0 = randn(fdim+1,1);
 % train regression model
 % Solving minimization problem using Matlab optimization toolbox
 options = optimset('GradObj','on');
