@@ -3,33 +3,11 @@ clear all;
 close all;
 
 % load data
-src = load('BP4D/same_exp_dif_sub.mat');
-inst = 4; % 14 % select one sequence
-idx_au = 1;
-dfactor = 5;
-% downsampledata(data,intensity,dfactor);
-data = src.features{inst}(1:dfactor:end,:)';
-intensity = src.AU{inst}(1:dfactor:end,idx_au);
-labels = zeros(3,2); % begining, apex, end
-[labels(1,2),labels(1,1)] = min(intensity);
-[labels(2,2),labels(2,1)] = max(intensity);
-labels(3,1) = size(intensity,1);
-labels(3,2) = intensity(end);
+src = load('SYN/syn1.mat');
 
 %% feature extraction / dimension reduction
-% select a subset of features
-data = data(99:end,:); % the first 98 are landmark points coordinates
-fdim = size(data,1); % dimension of input features
-% checkthe difference of feature values between consecutive frames
-fdiff = zeros(1,size(data,2)-1);
-for i = 1:length(fdiff)
-    fdiff(i) = norm(data(:,i)-data(:,i+1));
-end
-% % PCA
-% D_low = 100;
-% [C, eigvalue, proj, mean_train] = myPCA(data, D_low);
-% energy = cumsum(eigvalue)./sum(eigvalue);
-% plot(energy);
+data = src.data;
+labels = src.labels;
 
 %% define initial parameter of regression model
 rng default;
