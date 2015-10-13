@@ -14,18 +14,25 @@ inst_test = p(1+src.N/2:src.N);
 data = src.data(inst_train);
 labels = src.labels(inst_train);
 fdim = src.fdim;
+N = numel(data);
+train_data = [];
+train_label = [];
+for n = 1:N
+    nframe = size(labels{n},1);
+    for m = 1:nframe
+        train_data = [train_data; data{n}(:,labels{n}(m,1))'];
+        train_label = [train_label; labels{n}(m,2)];
+    end
+end
+train_data_scaled = train_data;
 
 %% define initial parameter of regression model
-rng default;
-theta0 = randn(fdim+1,1); %
-gamma = 1;
-% train regression model
-% Solving minimization problem using Matlab optimization toolbox
-options = optimset('GradObj','on','LargeScale','off');
-% [f0,g0] = regressor_base(theta0,data,labels);%,gamma
-% numgrad = computeNumericalGradient(@(theta) regressor_base(theta,data,labels), theta0);%,gamma
-% err = norm(g0-numgrad);
-[theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data,labels,gamma), theta0, options);%_base
+svm_param = [3 0 1 1];
+configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+model = svmtrain(train_label, train_data_scaled,configuration);
+% get parameter w,b from model
+% theta
+[predict_label, ~, dec_values_train] = predict(train_label, sparse(train_data_scaled), model);
 
 %% test: compute the AU intensity given testing frame and learned model
 dec_values = cell(1,length(inst_test));
