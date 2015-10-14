@@ -24,6 +24,7 @@ for n = 1:N
         train_label = [train_label; labels{n}(m,2)];
     end
 end
+% additional scaling may be performed
 train_data_scaled = train_data;
 
 %% define initial parameter of regression model
@@ -31,8 +32,11 @@ svm_param = [3 0 1 1];
 configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
 model = svmtrain(train_label, train_data_scaled,configuration);
 % get parameter w,b from model
-% theta
-[predict_label, ~, dec_values_train] = predict(train_label, sparse(train_data_scaled), model);
+w = model.SVs' * model.sv_coef;
+b = -model.rho;
+theta = [w(:); b];
+% evaluate on training data first
+[predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 
 %% test: compute the AU intensity given testing frame and learned model
 dec_values = cell(1,length(inst_test));
