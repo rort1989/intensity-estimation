@@ -71,19 +71,30 @@ options = optimset('GradObj','on');
 [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data,labels,gamma), theta0, options);
 
 %% test: compute the AU intensity given testing frame and learned model
-dec_values =theta'*[data; ones(1,size(data,2))];
-RR = corrcoef(dec_values,intensity);  ry = RR(1,2);
+dec_values = cell(1,length(inst_test));
+ry = zeros(1,length(inst_test));
+mse = zeros(1,length(inst_test));
+scale = zeros(1,length(inst_test));
+for n = 1:length(inst_test)
+    dec_values{n} =theta'*[src.data{inst_test(n)}; ones(1,size(src.data{inst_test(n)},2))]; %
+    RR = corrcoef(dec_values{n},src.intensity{inst_test(n)});  ry(n) = RR(1,2);
+    e = dec_values{n} - src.intensity{inst_test(n)};
+    mse(n) = e(:)'*e(:)/length(e);
+    apex = src.labels{inst_test(n)}(2,1);
+    scale(n) = dec_values{n}(apex)/src.labels{inst_test(n)}(2,2);
+end
+mean(ry)
+mean(mse)
+std(scale)
 
 %% save results
 % save('BP4D/results/model2_3.mat','theta0','theta','f','eflag','output','g','inst','idx_au','dfactor','ry','labels');
 
 %% plot intensity
-% close all;
-% for i = 4
-%     figure;
-%     T = size(src.AU{i},1);
-%     idx = 1:dfactor:T;
-%     plot(1:length(idx),src.AU{i}(idx,1),'r'); hold on; 
-%     plot(dec_values);
-%     %axis([0 length(idx) -1 6])
-% end
+close all;
+for i = 1:length(inst_test)
+    figure;
+    plot(src.intensity{inst_test(n)},'r'); hold on; 
+    plot(dec_values{n});
+    %axis([0 length(idx) -1 6])
+end
