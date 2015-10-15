@@ -29,14 +29,14 @@ for s = 1:numel(inst)
         end        
     end
 end
-inst_train = 1:count_inst-5; 
-inst_test = 1+count_inst-5:count_inst;
+inst_train = [1:4 10:12 14:16];%:count_inst-5; 
+inst_test = [17:21];%1+count_inst-5:count_inst;
 
 %% feature extraction / dimension reduction / downsampling
 % downsample: if the same intensity level stays for up to dfactor frames,
 % downsample it to one frame
 dfactor = 10;
-nconstraint = 0;
+nconstraint = zeros(count_inst,1);
 for n = 1:count_inst
     T = numel(intensity{n});
     slope = diff([-1 intensity{n}]);
@@ -53,15 +53,15 @@ for n = 1:count_inst
     intensity{n} = intensity{n}(idx_select);
     [labels{n}(1,2),labels{n}(1,1)] = min(intensity{n});
     [labels{n}(2,2),labels{n}(2,1)] = max(intensity{n});
-    labels{n}(3,1) = numel(intensity{n},1);
+    labels{n}(3,1) = numel(intensity{n});
     labels{n}(3,2) = intensity{n}(end);
     T = numel(intensity{n});
     if labels{n}(2,1) < 2
-        nconstraint = nconstraint + nchoosek(T,2);
+        nconstraint(n) = nconstraint(n) + nchoosek(T,2);
     elseif labels{n}(2,1) > T-1
-        nconstraint = nconstraint + nchoosek(labels{n}(2,1),2);
+        nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2);
     else
-        nconstraint = nconstraint + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
+        nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
     end
 end
 % select a subset of features
@@ -69,7 +69,7 @@ fdim = size(data{1},1); % dimension of input features
 
 %% define initial parameter of regression model
 rng default;
-theta0 = randn(fdim+1,1); 
+theta0 = 0.1*randn(fdim+1,1); 
 gamma = 1;
 % train regression model
 % Solving minimization problem using Matlab optimization toolbox
@@ -77,7 +77,7 @@ options = optimset('GradObj','on');
 % [f0,g0] = regressor(theta0,data,labels);
 % numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels), theta0);
 % err = norm(g0-numgrad);
-[theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data,labels,gamma), theta0, options);
+[theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options);
 
 %% test: compute the AU intensity given testing frame and learned model
 dec_values = cell(1,length(inst_test));
@@ -85,12 +85,12 @@ ry = zeros(1,length(inst_test));
 mse = zeros(1,length(inst_test));
 scale = zeros(1,length(inst_test));
 for n = 1:length(inst_test)
-    dec_values{n} =theta'*[src.data{inst_test(n)}; ones(1,size(src.data{inst_test(n)},2))]; %
-    RR = corrcoef(dec_values{n},src.intensity{inst_test(n)});  ry(n) = RR(1,2);
-    e = dec_values{n} - src.intensity{inst_test(n)};
+    dec_values{n} =theta'*[data{inst_test(n)}; ones(1,size(data{inst_test(n)},2))]; %
+    RR = corrcoef(dec_values{n},intensity{inst_test(n)});  ry(n) = RR(1,2);
+    e = dec_values{n} - intensity{inst_test(n)};
     mse(n) = e(:)'*e(:)/length(e);
-    apex = src.labels{inst_test(n)}(2,1);
-    scale(n) = dec_values{n}(apex)/src.labels{inst_test(n)}(2,2);
+    apex = labels{inst_test(n)}(2,1);
+    scale(n) = dec_values{n}(apex)/labels{inst_test(n)}(2,2);
 end
 mean(ry)
 mean(mse)
@@ -103,7 +103,7 @@ std(scale)
 close all;
 for i = 1:length(inst_test)
     figure;
-    plot(src.intensity{inst_test(n)},'r'); hold on; 
+    plot(intensity{inst_test(n)},'r'); hold on; 
     plot(dec_values{n});
     %axis([0 length(idx) -1 6])
 end
