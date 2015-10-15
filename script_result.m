@@ -40,7 +40,11 @@ for s = 1:numel(src.subject)
     end
 end
 
-
+%%
+for i = 21
+figure;
+plot(intensity{i});
+end
 
 % subplot(2,1,1)
 % plot(intensity); title('intensity level of selected AU')
