@@ -11,22 +11,27 @@ inst{15} = []; inst{16} = [1 9]; inst{17} = []; inst{18} = [4]; inst{19} = []; i
 inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1]; % ex1
 
 dfactor = 5;
-data = cell(1); %src.PCA_LBP_features;
-intensity = cell(1); %src.PSPI;
+data = cell(1); % features;
+id_sub = 0; % id of each sub: can use to find number of seq per sub
+intensity = cell(1); % src.PSPI;
 labels = cell(1); % begining, apex, end
-count_sub = 0;
+count_inst = 0;
 for s = 1:numel(inst)
-    if ~isempty(inst{s})
-        count_sub = count_sub + 1;
-        
+    if ~isempty(inst{s})        
+        for n = 1:numel(inst{s})
+            count_inst = count_inst + 1;
+            data{count_inst} = src.PCA_LBP_features{s}{inst{s}(n)}; % features
+            intensity{count_inst} = src.PSPI{s}{inst{s}(n)}; % pain intensity: a scalar
+            [labels{count_inst}(1,2),labels{count_inst}(1,1)] = min(intensity{count_inst});
+            [labels{count_inst}(2,2),labels{count_inst}(2,1)] = max(intensity{count_inst});
+            labels{count_inst}(3,1) = numel(intensity{count_inst},1);
+            labels{count_inst}(3,2) = intensity{count_inst}(end);
+            id_sub(count_inst) = s;
+        end        
     end
 end
-[labels(1,2),labels(1,1)] = min(intensity);
-[labels(2,2),labels(2,1)] = max(intensity);
-labels(3,1) = size(intensity,1);
-labels(3,2) = intensity(end);
 
-%% feature extraction / dimension reduction
+%% feature extraction / dimension reduction / downsampling
 % select a subset of features
 fdim = size(data,1); % dimension of input features
 % checkthe difference of feature values between consecutive frames
