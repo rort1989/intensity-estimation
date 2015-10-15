@@ -1,15 +1,19 @@
 %% Script for compute regression given data and intensity label for each frame
 clear all;
 close all;
-
+tt = tic;
 % load data
 src = load('McMaster/McMaster.mat');
 % first experiment 
 inst{1} = [6]; inst{2} = [5]; inst{3} = [1 4]; inst{4} = [2 6]; inst{5} = [3 5]; inst{6} = [1]; inst{7} = [];
 inst{8} = [2]; inst{9} = [8]; inst{10} = [2 5]; inst{11} = []; inst{12} = [3]; inst{13} = [5]; inst{14} = [1]; 
 inst{15} = []; inst{16} = [1 9]; inst{17} = []; inst{18} = [4]; inst{19} = []; inst{20} = []; inst{21} = [3]; 
-inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1]; % ex1
+inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 
+inst_select = [1:4 10 12:21];
+idx_cv = cv_idx(length(inst_select),5);
+
+for iter = 1:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
 intensity = cell(1); % src.PSPI;
@@ -29,8 +33,8 @@ for s = 1:numel(inst)
         end        
     end
 end
-inst_train = [1:4 10:12 14:16];%:count_inst-5; 
-inst_test = [17:21];%1+count_inst-5:count_inst;
+inst_train = inst_select(idx_cv(iter).train); %1:count_inst-5; %
+inst_test = inst_select(idx_cv(iter).validation); %1+count_inst-5:count_inst;
 
 %% feature extraction / dimension reduction / downsampling
 % downsample: if the same intensity level stays for up to dfactor frames,
@@ -66,6 +70,30 @@ for n = 1:count_inst
 end
 % select a subset of features
 fdim = size(data{1},1); % dimension of input features
+% % SVR formulation
+% N = numel(data);
+% train_data = [];
+% train_label = [];
+% for n = 1:N
+%     nframe = size(labels{n},1);
+%     for m = 1:nframe
+%         train_data = [train_data; data{n}(:,labels{n}(m,1))'];
+%         train_label = [train_label; labels{n}(m,2)];
+%     end
+% end
+% % additional scaling may be performed
+% train_data_scaled = train_data;
+% 
+% %% define initial parameter of regression model
+% svm_param = [3 0 1 1];
+% configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+% model = svmtrain(train_label, train_data_scaled,configuration);
+% % get parameter w,b from model
+% w = model.SVs' * model.sv_coef;
+% b = -model.rho;
+% theta = [w(:); b];
+% % evaluate on training data first
+% [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 
 %% define initial parameter of regression model
 rng default;
@@ -73,7 +101,7 @@ theta0 = 0.1*randn(fdim+1,1);
 gamma = 1;
 % train regression model
 % Solving minimization problem using Matlab optimization toolbox
-options = optimset('GradObj','on');
+options = optimset('GradObj','on','LargeScale','off');
 % [f0,g0] = regressor(theta0,data,labels);
 % numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels), theta0);
 % err = norm(g0-numgrad);
@@ -92,18 +120,21 @@ for n = 1:length(inst_test)
     apex = labels{inst_test(n)}(2,1);
     scale(n) = dec_values{n}(apex)/labels{inst_test(n)}(2,2);
 end
-mean(ry)
-mean(mse)
-std(scale)
-
+ry_fold(iter) = mean(ry)
+mse_fold(iter) = mean(mse)
+scale_fold(iter) = std(scale)
+diaplay(sprintf('iteration %d completed',iter));
 %% save results
-% save('BP4D/results/model2_3.mat','theta0','theta','f','eflag','output','g','inst','idx_au','dfactor','ry','labels');
+end % cross-validation
+save('McMaster/results/ex1_fea1_cv5.mat','theta0','theta','f','eflag','output','g','inst','dfactor','ry','labels');
 
 %% plot intensity
 close all;
-for i = 1:length(inst_test)
+for n = 1:length(inst_test)
     figure;
     plot(intensity{inst_test(n)},'r'); hold on; 
     plot(dec_values{n});
     %axis([0 length(idx) -1 6])
 end
+time = toc(tt);
+
