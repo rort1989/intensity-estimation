@@ -36,6 +36,7 @@ inst_test = 1+count_inst-5:count_inst;
 % downsample: if the same intensity level stays for up to dfactor frames,
 % downsample it to one frame
 dfactor = 10;
+nconstraint = 0;
 for n = 1:count_inst
     T = numel(intensity{n});
     slope = diff([-1 intensity{n}]);
@@ -54,6 +55,14 @@ for n = 1:count_inst
     [labels{n}(2,2),labels{n}(2,1)] = max(intensity{n});
     labels{n}(3,1) = numel(intensity{n},1);
     labels{n}(3,2) = intensity{n}(end);
+    T = numel(intensity{n});
+    if labels{n}(2,1) < 2
+        nconstraint = nconstraint + nchoosek(T,2);
+    elseif labels{n}(2,1) > T-1
+        nconstraint = nconstraint + nchoosek(labels{n}(2,1),2);
+    else
+        nconstraint = nconstraint + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
+    end
 end
 % select a subset of features
 fdim = size(data{1},1); % dimension of input features
