@@ -41,7 +41,7 @@ for s = 1:numel(src.subject)
 end
 
 %%
-for i = 21
+for i = 17:21%[1:4 10:12 14:16]%
 figure;
 plot(intensity{i});
 end
