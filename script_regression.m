@@ -3,11 +3,11 @@ clear all;
 close all;
 
 % load data
-src = load('BP4D/same_exp_dif_sub.mat');
+src = load('McMaster/McMaster.mat');
 inst = 4; % 14 % select one sequence
+
 idx_au = 1;
 dfactor = 5;
-% downsampledata(data,intensity,dfactor);
 data = src.features{inst}(1:dfactor:end,:)';
 intensity = src.AU{inst}(1:dfactor:end,idx_au);
 labels = zeros(3,2); % begining, apex, end
