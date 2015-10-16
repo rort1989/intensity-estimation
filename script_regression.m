@@ -12,7 +12,7 @@ inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 
 inst_select = [1:4 10 12:21];
 idx_cv = cv_idx(length(inst_select),5);
-method = 3; % 1. w/o reg.  2. SVR 3. rank-SVM
+method = 1; % 1. w/o reg.  2. SVR 3. rank-SVM
 solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
@@ -78,17 +78,24 @@ fdim = size(data{1},1); % dimension of input features
 
 %% solution
 if method == 1
-% define initial parameter of regression model
-rng default;
-theta0 = 0.1*randn(fdim+1,1);% 
-gamma = 1;
-% train regression model
-% Solving minimization problem using Matlab optimization toolbox
-options = optimset('GradObj','on','LargeScale','off');
-% [f0,g0] = regressor(theta0,data,labels);
-% numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels), theta0);
-% err = norm(g0-numgrad);
-[theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
+% Ordinal SVR:  hinge loss on both regressin and ordinal
+if solver == 1
+    % define initial parameter of regression model
+    rng default;
+    theta0 = 0.1*randn(fdim+1,1);%
+    gamma = 1;
+    % train regression model
+    % Solving minimization problem using Matlab optimization toolbox
+    options = optimset('GradObj','on','LargeScale','off');
+    % [f0,g0] = regressor(theta0,data,labels);
+    % numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels), theta0);
+    % err = norm(g0-numgrad);
+    [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
+elseif solver == 2
+    gamma = [1 1]; % note that two gammas, one for each loss term
+    epsilon = 0.1;
+    [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma);
+end
 
 elseif method == 2
 % SVR formulation: regression loss only with regularization
