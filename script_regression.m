@@ -12,7 +12,9 @@ inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 
 inst_select = [1:4 10 12:21];
 idx_cv = cv_idx(length(inst_select),5);
-method = 2; % 1. w/o reg.  2. SVR 3. rank-SVM
+method = 3; % 1. w/o reg.  2. SVR 3. rank-SVM
+solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
 
 for iter = 1:length(idx_cv)
@@ -54,19 +56,22 @@ for n = 1:count_inst
     data{n} = data{n}(:,idx_select);
     intensity{n} = intensity{n}(idx_select);
     T = numel(intensity{n});
-    [labels{n}(1,2),labels{n}(1,1)] = min(intensity{n});
-    [labels{n}(2,2),labels{n}(2,1)] = max(intensity{n});
-    labels{n}(3,1) = numel(intensity{n});
-    labels{n}(3,2) = intensity{n}(end);    
-%     labels{n} = [1:numel(intensity{n})]';
-%     labels{n} = [labels{n} intensity{n}']; 
-% if labels{n}(2,1) < 2
-%         nconstraint(n) = nconstraint(n) + nchoosek(T,2);
-%     elseif labels{n}(2,1) > T-1
-%         nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2);
-%     else
-%         nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
-%     end
+    if ~allframes
+        [labels{n}(1,2),labels{n}(1,1)] = min(intensity{n});
+        [labels{n}(2,2),labels{n}(2,1)] = max(intensity{n});
+        labels{n}(3,1) = numel(intensity{n});
+        labels{n}(3,2) = intensity{n}(end);
+        if labels{n}(2,1) < 2
+            nconstraint(n) = nconstraint(n) + nchoosek(T,2);
+        elseif labels{n}(2,1) > T-1
+            nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2);
+        else
+            nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
+        end
+    else
+        labels{n} = [1:numel(intensity{n})]';
+        labels{n} = [labels{n} intensity{n}'];
+    end
 end
 % select a subset of features
 fdim = size(data{1},1); % dimension of input features
@@ -103,15 +108,24 @@ else
     train_data_scaled = train_data;
 end
 % define initial parameter of regression model
-svm_param = [3 0 1 1];
-configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-model = svmtrain(train_label, train_data_scaled,configuration);
-% get parameter w,b from model
-w = model.SVs' * model.sv_coef;
-b = -model.rho;
-theta = [w(:); b];
-% evaluate on training data first
-[predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
+if solver == 1
+    % solver: libsvm
+    svm_param = [3 0 1 0.1]; % L2-regularized hinge-loss, linear kernel, gamma coefficient for kernel, tolerence 0.1
+    configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+    model = svmtrain(train_label, sparse(train_data_scaled),configuration);
+    % get parameter w,b from model
+    w = model.SVs' * model.sv_coef;
+    b = -model.rho;
+    theta = [w(:); b];
+    % evaluate on training data first
+    [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
+elseif solver == 2
+    % solver: liblinear
+    svm_param = [11 1 0.1 1]; % L2-regularized L2-loss, cost coefficient 1, tolerance 0.1, bias coefficient 1
+    configuration = sprintf('-s %d -c %f -p %f -B %d',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+    model = train(train_label, sparse(train_data_scaled),configuration);
+    theta = model.w(:);
+end
 
 elseif method == 3 % % % %%%%%%%%%%%%%%%%%%%%% FURTHER DEBUG THIS PART
 % ordinal regression formulation: ordinal loss only with regularization
@@ -122,11 +136,13 @@ train_label = [];
 for n = 1:N
     [~,idx] = max(labels{inst_train(n)}(:,2)); % index of apex frame
     apx = labels{inst_train(n)}(idx,1);
-    pairs_fhalf = nchoosek(1:apx,2);
-    for p = 1:size(pairs_fhalf)
-        train_data = [train_data; data{inst_train(n)}(:,pairs_fhalf(p,1))'-data{inst_train(n)}(:,pairs_fhalf(p,2))'];
+    if apx > 1
+        pairs_fhalf = nchoosek(1:apx,2);
+        for p = 1:size(pairs_fhalf)
+            train_data = [train_data; data{inst_train(n)}(:,pairs_fhalf(p,1))'-data{inst_train(n)}(:,pairs_fhalf(p,2))'];
+        end
+        train_label = [train_label; ones(p,1)];
     end
-    train_label = [train_label; ones(p,1)];
     T = size(data{inst_train(n)},2);
     if apx < T
         pairs_lhalf = nchoosek(apx:T,2);  % allocate space for pairs first when scale up
@@ -144,19 +160,27 @@ else
     train_data_scaled = train_data;
 end
 % define initial parameter of regression model
-svm_param = [0 0 1 1];
-configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-model = svmtrain(train_label, train_data_scaled,configuration);
-% get parameter w,b from model
-w = model.SVs' * model.sv_coef;
-b = -model.rho;
-theta = [w(:); b];
-% evaluate on training data first
-[predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
-    
+% solver: libsvm
+if solver == 1
+    svm_param = [0 0 1 1];
+    configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+    model = svmtrain(train_label, sparse(train_data_scaled),configuration);
+    % get parameter w,b from model
+    w = model.SVs' * model.sv_coef;
+    b = -model.rho;
+    theta = -[w(:); b];
+    % evaluate on training data first
+    [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
+elseif solver == 2
+    % solver: liblinear
+    svm_param = [0 1 -1]; % L2-regularized logistic regression, cost coefficient 1, bias coefficient -1
+    configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
+    model = train(train_label, sparse(train_data_scaled),configuration);
+    theta = -[model.w(:); 0];
+end
 end
 
-%% test: compute the AU intensity given testing frame and learned model
+%% test: compute the prediction intensity given testing frame and learned model
 dec_values = cell(1,length(inst_test));
 ry = zeros(1,length(inst_test));
 mse = zeros(1,length(inst_test));
@@ -173,9 +197,9 @@ ry_fold(iter) = mean(ry);
 mse_fold(iter) = mean(mse);
 scale_fold(iter) = std(scale);
 display(sprintf('iteration %d completed',iter));
-
+%%
 for n = 1:length(inst_test)
-	subplot(length(inst_select)/3,3,idx_cv(iter).validation(n))
+	subplot(length(inst_select)/3,3,idx_cv(iter).validation(n))%n
     plot(intensity{inst_test(n)}); hold on; 
     plot(dec_values{n},'r');
     axis([0 length(intensity{inst_test(n)}) -5 9])
