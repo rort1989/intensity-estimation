@@ -41,9 +41,11 @@ for s = 1:numel(src.subject)
 end
 
 %%
-for i = [1:4 10 12:16]%[1:4 10:12 14:16]%
-figure;
-plot(intensity{i});
+inst_select = [1:4 10 12:21];
+for i = 1:length(inst_select)%[1:4 10:12 14:16]%
+    subplot(length(inst_select)/3,3,i);
+    plot(intensity{inst_select(i)});
+    axis([1 length(intensity{inst_select(i)}) 0 9])
 end
 
 % subplot(2,1,1)

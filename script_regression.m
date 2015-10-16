@@ -12,6 +12,8 @@ inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 
 inst_select = [1:4 10 12:21];
 idx_cv = cv_idx(length(inst_select),5);
+method = 2; % 1. w/o reg.  2. SVR 3. rank-SVM
+scaled = 0;
 
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
@@ -24,11 +26,7 @@ for s = 1:numel(inst)
         for n = 1:numel(inst{s})
             count_inst = count_inst + 1;
             data{count_inst} = src.PCA_LBP_features{s}{inst{s}(n)}'; % features
-            intensity{count_inst} = src.PSPI{s}{inst{s}(n)}'; % pain intensity: a scalar
-            [labels{count_inst}(1,2),labels{count_inst}(1,1)] = min(intensity{count_inst});
-            [labels{count_inst}(2,2),labels{count_inst}(2,1)] = max(intensity{count_inst});
-            labels{count_inst}(3,1) = numel(intensity{count_inst},1);
-            labels{count_inst}(3,2) = intensity{count_inst}(end);
+            intensity{count_inst} = src.PSPI{s}{inst{s}(n)}'; % pain intensity: a scalar     
             id_sub(count_inst) = s;
         end        
     end
@@ -55,49 +53,29 @@ for n = 1:count_inst
     end
     data{n} = data{n}(:,idx_select);
     intensity{n} = intensity{n}(idx_select);
+    T = numel(intensity{n});
     [labels{n}(1,2),labels{n}(1,1)] = min(intensity{n});
     [labels{n}(2,2),labels{n}(2,1)] = max(intensity{n});
     labels{n}(3,1) = numel(intensity{n});
-    labels{n}(3,2) = intensity{n}(end);
-    T = numel(intensity{n});
-    if labels{n}(2,1) < 2
-        nconstraint(n) = nconstraint(n) + nchoosek(T,2);
-    elseif labels{n}(2,1) > T-1
-        nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2);
-    else
-        nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
-    end
+    labels{n}(3,2) = intensity{n}(end);    
+%     labels{n} = [1:numel(intensity{n})]';
+%     labels{n} = [labels{n} intensity{n}']; 
+% if labels{n}(2,1) < 2
+%         nconstraint(n) = nconstraint(n) + nchoosek(T,2);
+%     elseif labels{n}(2,1) > T-1
+%         nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2);
+%     else
+%         nconstraint(n) = nconstraint(n) + nchoosek(labels{n}(2,1),2) + nchoosek(T-labels{n}(2,1)+1,2);
+%     end
 end
 % select a subset of features
 fdim = size(data{1},1); % dimension of input features
-% % SVR formulation
-% N = numel(data);
-% train_data = [];
-% train_label = [];
-% for n = 1:N
-%     nframe = size(labels{n},1);
-%     for m = 1:nframe
-%         train_data = [train_data; data{n}(:,labels{n}(m,1))'];
-%         train_label = [train_label; labels{n}(m,2)];
-%     end
-% end
-% % additional scaling may be performed
-% train_data_scaled = train_data;
-% 
-% %% define initial parameter of regression model
-% svm_param = [3 0 1 1];
-% configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-% model = svmtrain(train_label, train_data_scaled,configuration);
-% % get parameter w,b from model
-% w = model.SVs' * model.sv_coef;
-% b = -model.rho;
-% theta = [w(:); b];
-% % evaluate on training data first
-% [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 
-%% define initial parameter of regression model
+%% solution
+if method == 1
+% define initial parameter of regression model
 rng default;
-theta0 = 0.1*randn(fdim+1,1); 
+theta0 = 0.1*randn(fdim+1,1);% 
 gamma = 1;
 % train regression model
 % Solving minimization problem using Matlab optimization toolbox
@@ -105,7 +83,78 @@ options = optimset('GradObj','on','LargeScale','off');
 % [f0,g0] = regressor(theta0,data,labels);
 % numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels), theta0);
 % err = norm(g0-numgrad);
-[theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options);
+[theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
+
+elseif method == 2
+% SVR formulation: regression loss only with regularization
+N = length(inst_train);
+train_data = [];
+train_label = [];
+for n = 1:N
+    train_data = [train_data; data{inst_train(n)}(:,labels{inst_train(n)}(:,1))'];
+    train_label = [train_label; labels{inst_train(n)}(:,2)];
+end
+% additional scaling may be performed
+if scaled
+    temp = bsxfun(@minus, train_data, min(train_data)); %data_together % ATTENTION: NOT data_together
+    data_together_scaled = bsxfun(@rdivide, temp, max(train_data)-min(train_data)); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
+    train_data_scaled = data_together_scaled(1:size(train_data,1),:);
+else
+    train_data_scaled = train_data;
+end
+% define initial parameter of regression model
+svm_param = [3 0 1 1];
+configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+model = svmtrain(train_label, train_data_scaled,configuration);
+% get parameter w,b from model
+w = model.SVs' * model.sv_coef;
+b = -model.rho;
+theta = [w(:); b];
+% evaluate on training data first
+[predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
+
+elseif method == 3 % % % %%%%%%%%%%%%%%%%%%%%% FURTHER DEBUG THIS PART
+% ordinal regression formulation: ordinal loss only with regularization
+N = length(inst_train);
+train_data = [];
+train_label = [];
+% formalize the pairwise data
+for n = 1:N
+    [~,idx] = max(labels{inst_train(n)}(:,2)); % index of apex frame
+    apx = labels{inst_train(n)}(idx,1);
+    pairs_fhalf = nchoosek(1:apx,2);
+    for p = 1:size(pairs_fhalf)
+        train_data = [train_data; data{inst_train(n)}(:,pairs_fhalf(p,1))'-data{inst_train(n)}(:,pairs_fhalf(p,2))'];
+    end
+    train_label = [train_label; ones(p,1)];
+    T = size(data{inst_train(n)},2);
+    if apx < T
+        pairs_lhalf = nchoosek(apx:T,2);  % allocate space for pairs first when scale up
+        for p = 1:size(pairs_lhalf,1)
+            train_data = [train_data; data{inst_train(n)}(:,pairs_lhalf(p,1))'-data{inst_train(n)}(:,pairs_lhalf(p,2))'];
+        end
+        train_label = [train_label; 2*ones(p,1)];
+    end
+end
+if scaled
+    temp = bsxfun(@minus, train_data, min(train_data)); %data_together % ATTENTION: NOT data_together
+    data_together_scaled = bsxfun(@rdivide, temp, max(train_data)-min(train_data)); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
+    train_data_scaled = data_together_scaled(1:size(train_data,1),:);
+else
+    train_data_scaled = train_data;
+end
+% define initial parameter of regression model
+svm_param = [0 0 1 1];
+configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+model = svmtrain(train_label, train_data_scaled,configuration);
+% get parameter w,b from model
+w = model.SVs' * model.sv_coef;
+b = -model.rho;
+theta = [w(:); b];
+% evaluate on training data first
+[predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
+    
+end
 
 %% test: compute the AU intensity given testing frame and learned model
 dec_values = cell(1,length(inst_test));
@@ -117,24 +166,33 @@ for n = 1:length(inst_test)
     RR = corrcoef(dec_values{n},intensity{inst_test(n)});  ry(n) = RR(1,2);
     e = dec_values{n} - intensity{inst_test(n)};
     mse(n) = e(:)'*e(:)/length(e);
-    apex = labels{inst_test(n)}(2,1);
-    scale(n) = dec_values{n}(apex)/labels{inst_test(n)}(2,2);
+    [value,apex] = max(labels{inst_test(n)}(:,2));
+    scale(n) = dec_values{n}(apex)/value;
 end
-ry_fold(iter) = mean(ry)
-mse_fold(iter) = mean(mse)
-scale_fold(iter) = std(scale)
-diaplay(sprintf('iteration %d completed',iter));
-%% save results
-end % cross-validation
-save('McMaster/results/ex1_fea1_cv5.mat','theta0','theta','f','eflag','output','g','inst','dfactor','ry','labels');
+ry_fold(iter) = mean(ry);
+mse_fold(iter) = mean(mse);
+scale_fold(iter) = std(scale);
+display(sprintf('iteration %d completed',iter));
 
-%% plot intensity
-close all;
 for n = 1:length(inst_test)
-    figure;
-    plot(intensity{inst_test(n)},'r'); hold on; 
-    plot(dec_values{n});
-    %axis([0 length(idx) -1 6])
+	subplot(length(inst_select)/3,3,idx_cv(iter).validation(n))
+    plot(intensity{inst_test(n)}); hold on; 
+    plot(dec_values{n},'r');
+    axis([0 length(intensity{inst_test(n)}) -5 9])
 end
+
+end % cross-validation
+%% save results
+% save('McMaster/results/ex1_fea1_base2_cv5.mat','theta0','theta','f','eflag','output','g','inst_select','inst_train','inst_test','ry','mse','scale','gamma','dfactor');
+mean(ry_fold)
+mean(mse_fold)
+%% plot intensity
+% close all;
+% for n = 1:length(inst_test)
+%     figure;
+%     plot(intensity{inst_test(n)},'r'); hold on; 
+%     plot(dec_values{n});
+%     %axis([0 length(idx) -1 6])
+% end
 time = toc(tt);
 
