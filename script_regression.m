@@ -12,7 +12,7 @@ inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 
 inst_select = [1:4 10 12:21];
 idx_cv = cv_idx(length(inst_select),5);
-method = 1; % 1. w/o reg.  2. SVR 3. rank-SVM
+method = 3; % 1. w/o reg.  2. SVR 3. rank-SVM
 solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
@@ -83,18 +83,19 @@ if solver == 1
     % define initial parameter of regression model
     rng default;
     theta0 = 0.1*randn(fdim+1,1);%
-    gamma = 1;
+    gamma = [1 10];
     % train regression model
     % Solving minimization problem using Matlab optimization toolbox
     options = optimset('GradObj','on','LargeScale','off');
-    % [f0,g0] = regressor(theta0,data,labels);
-    % numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels), theta0);
-    % err = norm(g0-numgrad);
+%     [f0,g0] = regressor(theta0,data,labels,gamma);
+%     numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0);
+%     err = norm(g0-numgrad);
     [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
 elseif solver == 2
     gamma = [1 1]; % note that two gammas, one for each loss term
     epsilon = 0.1;
     [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma);
+    theta = [w(:);b];
 end
 
 elseif method == 2
@@ -128,7 +129,7 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [11 1 0.1 1]; % L2-regularized L2-loss, cost coefficient 1, tolerance 0.1, bias coefficient 1
+    svm_param = [11 1 0.1 1]; % L2-regularized L2-loss(11) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
     configuration = sprintf('-s %d -c %f -p %f -B %d',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
     model = train(train_label, sparse(train_data_scaled),configuration);
     theta = model.w(:);
@@ -169,7 +170,7 @@ end
 % define initial parameter of regression model
 % solver: libsvm
 if solver == 1
-    svm_param = [0 0 1 1];
+    svm_param = [0 0 1 1]; % L2-regularized hinge loss, cost coefficient 1
     configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
     model = svmtrain(train_label, sparse(train_data_scaled),configuration);
     % get parameter w,b from model
