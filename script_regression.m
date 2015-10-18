@@ -12,8 +12,8 @@ inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 
 inst_select = [1:4 10 12:21];
 idx_cv = cv_idx(length(inst_select),5);
-method = 3; % 1. w/o reg.  2. SVR 3. rank-SVM
-solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
+solver = 1; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
 
@@ -78,24 +78,37 @@ fdim = size(data{1},1); % dimension of input features
 
 %% solution
 if method == 1
-% Ordinal SVR:  hinge loss on both regressin and ordinal
+% regressin and ordinal
+N = length(inst_train);
+train_data = [];
+for n = 1:N
+    train_data = [train_data; data{inst_train(n)}']; % should use all frames of all sequences
+end
+if scaled
+    scale_max = max(train_data);
+    scale_min = min(train_data);
+    for n = 1:N
+        temp = bsxfun(@minus, data{inst_train(n)}, scale_min');
+        data{inst_train(n)} = bsxfun(@rdivide, temp, scale_max'-scale_min');
+    end
+end
 if solver == 1
     % define initial parameter of regression model
     rng default;
     theta0 = 0.1*randn(fdim+1,1);%
-    gamma = [1 10];
+    gamma = [1 10]; % the second one is regularization coefficient
     % train regression model
     % Solving minimization problem using Matlab optimization toolbox
-    options = optimset('GradObj','on','LargeScale','off');
+    options = optimset('GradObj','on','LargeScale','off','MaxIter',1000);
 %     [f0,g0] = regressor(theta0,data,labels,gamma);
 %     numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0);
 %     err = norm(g0-numgrad);
     [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
 elseif solver == 2
-    gamma = [1 1]; % note that two gammas, one for each loss term
-    epsilon = 0.1;
-    [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma);
-    theta = [w(:);b];
+    gamma = [1 0.000001]; % note that two gammas, one for each loss term
+    epsilon = [0.1 1];
+    [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, 1);
+    theta = [w(:); b];
 end
 
 elseif method == 2
@@ -107,10 +120,12 @@ for n = 1:N
     train_data = [train_data; data{inst_train(n)}(:,labels{inst_train(n)}(:,1))'];
     train_label = [train_label; labels{inst_train(n)}(:,2)];
 end
-% additional scaling may be performed
+% optional scaling may be performed
 if scaled
-    temp = bsxfun(@minus, train_data, min(train_data)); %data_together % ATTENTION: NOT data_together
-    data_together_scaled = bsxfun(@rdivide, temp, max(train_data)-min(train_data)); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
+    scale_max = max(train_data); 
+    scale_min = min(train_data);
+    temp = bsxfun(@minus, train_data, scale_min); %data_together % ATTENTION: NOT data_together     
+    data_together_scaled = bsxfun(@rdivide, temp, scale_max-scale_min); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
     train_data_scaled = data_together_scaled(1:size(train_data,1),:);
 else
     train_data_scaled = train_data;
@@ -129,13 +144,13 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [11 1 0.1 1]; % L2-regularized L2-loss(11) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+    svm_param = [13 1 0.1 1]; % L2-regularized L2-loss(11) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
     configuration = sprintf('-s %d -c %f -p %f -B %d',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
     model = train(train_label, sparse(train_data_scaled),configuration);
     theta = model.w(:);
 end
 
-elseif method == 3 % % % %%%%%%%%%%%%%%%%%%%%% FURTHER DEBUG THIS PART
+elseif method == 3 % MAY NEED FURTHER DEBUG THIS PART
 % ordinal regression formulation: ordinal loss only with regularization
 N = length(inst_train);
 train_data = [];
@@ -160,9 +175,12 @@ for n = 1:N
         train_label = [train_label; 2*ones(p,1)];
     end
 end
+% optional scaling may be performed
 if scaled
-    temp = bsxfun(@minus, train_data, min(train_data)); %data_together % ATTENTION: NOT data_together
-    data_together_scaled = bsxfun(@rdivide, temp, max(train_data)-min(train_data)); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
+    scale_max = max(train_data); 
+    scale_min = min(train_data); 
+    temp = bsxfun(@minus, train_data, scale_min); %data_together % ATTENTION: NOT data_together    
+    data_together_scaled = bsxfun(@rdivide, temp, scale_max-scale_min); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
     train_data_scaled = data_together_scaled(1:size(train_data,1),:);
 else
     train_data_scaled = train_data;
@@ -181,10 +199,10 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [0 1 -1]; % L2-regularized logistic regression, cost coefficient 1, bias coefficient -1
+    svm_param = [0 1 -1]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
     configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
     model = train(train_label, sparse(train_data_scaled),configuration);
-    theta = -[model.w(:); 0];
+    theta = -[model.w(:); 0];    
 end
 end
 
@@ -194,7 +212,11 @@ ry = zeros(1,length(inst_test));
 mse = zeros(1,length(inst_test));
 scale = zeros(1,length(inst_test));
 for n = 1:length(inst_test)
-    dec_values{n} =theta'*[data{inst_test(n)}; ones(1,size(data{inst_test(n)},2))]; %
+    test_data = data{inst_test(n)};
+    if scaled
+        test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
+    end
+    dec_values{n} =theta'*[test_data; ones(1,size(data{inst_test(n)},2))]; %
     RR = corrcoef(dec_values{n},intensity{inst_test(n)});  ry(n) = RR(1,2);
     e = dec_values{n} - intensity{inst_test(n)};
     mse(n) = e(:)'*e(:)/length(e);
