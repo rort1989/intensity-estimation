@@ -4,28 +4,22 @@ close all;
 tt = tic;
 % load data
 src = load('McMaster/McMaster.mat');
-% % first experiment 
-% inst{1} = [6]; inst{2} = [5]; inst{3} = [1 4]; inst{4} = [2 6]; inst{5} = [3 5]; inst{6} = [1]; inst{7} = []; inst{8} = [2]; inst{9} = [8]; 
-% inst{10} = [2 5]; inst{11} = []; inst{12} = [3]; inst{13} = [5]; inst{14} = [1]; inst{15} = []; inst{16} = [1 9]; inst{17} = []; inst{18} = [4]; 
-% inst{19} = []; inst{20} = []; inst{21} = [3]; inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 % second experiment: complete dataset
 inst = cell(numel(src.sequence),1); NN = 0;
 for i = 1:numel(inst)
     inst{i} = 1:numel(src.sequence{i});
     NN = NN + numel(inst{i});
 end
-% % first experiment
-% inst_select = [1:4 10 12:21]; 
-% idx_cv = cv_idx(length(inst_select),5);
-% second experiment
+
+% second experiment: leave one subject out
 inst_select = 1:NN;
 idx_cv = lot_idx(inst);
-method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
-allframes = 1; % 0: use only apex and begin/end frames in labels; 1: use all frames
+method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
+solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
 
-for iter = 1%:length(idx_cv)
+for iter = 1:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
 intensity = cell(1); % src.PSPI;
@@ -41,13 +35,13 @@ for s = 1:numel(inst)
         end        
     end
 end
-inst_train = inst_select(idx_cv(iter).train); %1:count_inst-5; %
-inst_test = inst_select(idx_cv(iter).validation); %1+count_inst-5:count_inst;
+inst_train = inst_select(idx_cv(iter).train); 
+inst_test = inst_train;%inst_select(idx_cv(iter).validation); 
 
 %% feature extraction / dimension reduction / downsampling
 % downsample: if the same intensity level stays for up to dfactor frames,
 % downsample it to one frame
-dfactor = 10;
+dfactor = 1;
 nconstraint = zeros(count_inst,1);
 for n = 1:count_inst
     T = numel(intensity{n});
@@ -121,6 +115,12 @@ elseif solver == 2
     epsilon = [0.1 1];
     option = 1;
     [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, option);
+    theta = [w(:); b];
+elseif solver == 3
+    gamma = [1 0.000001]; % note that two gammas, one for each loss term
+    epsilon = [0.1 1];
+    option = 1;
+    [w,b,converge] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsion', epsilon, 'option', option);
     theta = [w(:); b];
 end
 
@@ -223,25 +223,6 @@ end
 end
 
 %% test: compute the prediction intensity given testing frame and learned model
-% dec_values = cell(1,length(inst_test));
-% ry = zeros(1,length(inst_test));
-% mse = zeros(1,length(inst_test));
-% scale = zeros(1,length(inst_test));
-% for n = 1:length(inst_test)
-%     test_data = data{inst_test(n)};
-%     if scaled
-%         test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
-%     end
-%     dec_values{n} =theta'*[test_data; ones(1,size(data{inst_test(n)},2))]; %
-%     RR = corrcoef(dec_values{n},intensity{inst_test(n)});  ry(n) = RR(1,2);
-%     e = dec_values{n} - intensity{inst_test(n)};
-%     mse(n) = e(:)'*e(:)/length(e);
-%     [value,apex] = max(labels{inst_test(n)}(:,2));
-%     scale(n) = dec_values{n}(apex)/value;
-% end
-% ry_fold(iter) = mean(ry);
-% mse_fold(iter) = mean(mse);
-% scale_fold(iter) = std(scale);
 % alternative: concatenate all testing frames
 test_data = [];
 test_label = [];
@@ -262,13 +243,11 @@ ry_fold(iter) = ry;
 mse_fold(iter) = mse;
 scale_fold(iter) = scale;
 display(sprintf('iteration %d completed',iter));
-%%
-% for n = 1:length(inst_test)
-% 	subplot(length(inst_select)/3,3,idx_cv(iter).validation(n))%n
-%     plot(intensity{inst_test(n)}); hold on; 
-%     plot(dec_values{n},'r');
-%     axis([0 length(intensity{inst_test(n)}) -5 9])
-% end
+%% plot concatenate seq
+subplot(numel(inst)/5,5,iter)
+plot(test_label); hold on; 
+plot(dec_values,'r');
+% axis([0 length(intensity{inst_test(n)}) -5 9])
 
 end % cross-validation
 %% plot intensity
