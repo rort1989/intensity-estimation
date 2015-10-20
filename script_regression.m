@@ -13,7 +13,7 @@ inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
 inst_select = [1:4 10 12:21];
 idx_cv = cv_idx(length(inst_select),5);
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 1; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
 
@@ -109,6 +109,18 @@ elseif solver == 2
     epsilon = [0.1 1];
     [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, 1);
     theta = [w(:); b];
+elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1),epsilon,rho
+    gamma = [1 0.01]; % note that two gammas, one for each loss term
+    epsilon = [0.1 1];
+    option = 1;    max_iter = 200; rho = 0.1; lambda = 1000;
+    [w,b,converge,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda); % 
+    if iter == 1
+        theta = [w(:); b];
+        z(z<0)=0;
+        0.5*lambda*(w')*w
+        sum(z(1:72))
+        sum(z(73:end))
+    end
 end
 
 elseif method == 2
