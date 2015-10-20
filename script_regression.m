@@ -4,20 +4,28 @@ close all;
 tt = tic;
 % load data
 src = load('McMaster/McMaster.mat');
-% first experiment 
-inst{1} = [6]; inst{2} = [5]; inst{3} = [1 4]; inst{4} = [2 6]; inst{5} = [3 5]; inst{6} = [1]; inst{7} = [];
-inst{8} = [2]; inst{9} = [8]; inst{10} = [2 5]; inst{11} = []; inst{12} = [3]; inst{13} = [5]; inst{14} = [1]; 
-inst{15} = []; inst{16} = [1 9]; inst{17} = []; inst{18} = [4]; inst{19} = []; inst{20} = []; inst{21} = [3]; 
-inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
+% % first experiment 
+% inst{1} = [6]; inst{2} = [5]; inst{3} = [1 4]; inst{4} = [2 6]; inst{5} = [3 5]; inst{6} = [1]; inst{7} = []; inst{8} = [2]; inst{9} = [8]; 
+% inst{10} = [2 5]; inst{11} = []; inst{12} = [3]; inst{13} = [5]; inst{14} = [1]; inst{15} = []; inst{16} = [1 9]; inst{17} = []; inst{18} = [4]; 
+% inst{19} = []; inst{20} = []; inst{21} = [3]; inst{22} = []; inst{23} = []; inst{24} = []; inst{25} = [1];
+% second experiment: complete dataset
+inst = cell(numel(src.sequence),1); NN = 0;
+for i = 1:numel(inst)
+    inst{i} = 1:numel(src.sequence{i});
+    NN = NN + numel(inst{i});
+end
+% % first experiment
+% inst_select = [1:4 10 12:21]; 
+% idx_cv = cv_idx(length(inst_select),5);
+% second experiment
+inst_select = 1:NN;
+idx_cv = lot_idx(inst);
+method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
+solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+allframes = 1; % 0: use only apex and begin/end frames in labels; 1: use all frames
+scaled = 1;
 
-inst_select = [1:4 10 12:21];
-idx_cv = cv_idx(length(inst_select),5);
-method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 1; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
-allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
-scaled = 0;
-
-for iter = 1:length(idx_cv)
+for iter = 1%:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
 intensity = cell(1); % src.PSPI;
@@ -96,18 +104,23 @@ if solver == 1
     % define initial parameter of regression model
     rng default;
     theta0 = 0.1*randn(fdim+1,1);%
-    gamma = [1 10]; % the second one is regularization coefficient
+    gamma = [0.001 0];  % the second one is regularization coefficient
+    % some good config: [0.001 1000] for apex&onset only; [1 100000] for all frames
     % train regression model
     % Solving minimization problem using Matlab optimization toolbox
     options = optimset('GradObj','on','LargeScale','off','MaxIter',1000);
-%     [f0,g0] = regressor(theta0,data,labels,gamma);
+    [f0,g0] = regressor(theta0,data,labels,gamma);
 %     numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0);
 %     err = norm(g0-numgrad);
     [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
+    if iter == length(idx_cv)
+        [ff,gg,fr,fo] = regressor(theta,data(inst_train),labels(inst_train),gamma);
+    end
 elseif solver == 2
     gamma = [1 0.000001]; % note that two gammas, one for each loss term
     epsilon = [0.1 1];
-    [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, 1);
+    option = 1;
+    [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, option);
     theta = [w(:); b];
 end
 
@@ -144,7 +157,7 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [13 1 0.1 1]; % L2-regularized L2-loss(11) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+    svm_param = [11 1 0.1 1]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
     configuration = sprintf('-s %d -c %f -p %f -B %d',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
     model = train(train_label, sparse(train_data_scaled),configuration);
     theta = model.w(:);
@@ -199,47 +212,65 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [0 1 -1]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
+    svm_param = [3 1 -1]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
     configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
     model = train(train_label, sparse(train_data_scaled),configuration);
     theta = -[model.w(:); 0];    
+elseif solver == 3
+    % solver: rank-SVM
+    
 end
 end
 
 %% test: compute the prediction intensity given testing frame and learned model
-dec_values = cell(1,length(inst_test));
-ry = zeros(1,length(inst_test));
-mse = zeros(1,length(inst_test));
-scale = zeros(1,length(inst_test));
+% dec_values = cell(1,length(inst_test));
+% ry = zeros(1,length(inst_test));
+% mse = zeros(1,length(inst_test));
+% scale = zeros(1,length(inst_test));
+% for n = 1:length(inst_test)
+%     test_data = data{inst_test(n)};
+%     if scaled
+%         test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
+%     end
+%     dec_values{n} =theta'*[test_data; ones(1,size(data{inst_test(n)},2))]; %
+%     RR = corrcoef(dec_values{n},intensity{inst_test(n)});  ry(n) = RR(1,2);
+%     e = dec_values{n} - intensity{inst_test(n)};
+%     mse(n) = e(:)'*e(:)/length(e);
+%     [value,apex] = max(labels{inst_test(n)}(:,2));
+%     scale(n) = dec_values{n}(apex)/value;
+% end
+% ry_fold(iter) = mean(ry);
+% mse_fold(iter) = mean(mse);
+% scale_fold(iter) = std(scale);
+% alternative: concatenate all testing frames
+test_data = [];
+test_label = [];
 for n = 1:length(inst_test)
-    test_data = data{inst_test(n)};
-    if scaled
-        test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
-    end
-    dec_values{n} =theta'*[test_data; ones(1,size(data{inst_test(n)},2))]; %
-    RR = corrcoef(dec_values{n},intensity{inst_test(n)});  ry(n) = RR(1,2);
-    e = dec_values{n} - intensity{inst_test(n)};
-    mse(n) = e(:)'*e(:)/length(e);
-    [value,apex] = max(labels{inst_test(n)}(:,2));
-    scale(n) = dec_values{n}(apex)/value;
+    test_data = [test_data data{inst_test(n)}];
+    test_label = [test_label intensity{inst_test(n)}];
 end
-ry_fold(iter) = mean(ry);
-mse_fold(iter) = mean(mse);
-scale_fold(iter) = std(scale);
+if scaled
+    test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
+end
+dec_values =theta'*[test_data; ones(1,size(test_data,2))];
+RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
+e = dec_values - test_label;
+mse = e(:)'*e(:)/length(e);
+[value,apex] = max(test_label);
+scale = dec_values(apex)/value;
+ry_fold(iter) = ry;
+mse_fold(iter) = mse;
+scale_fold(iter) = scale;
 display(sprintf('iteration %d completed',iter));
 %%
-for n = 1:length(inst_test)
-	subplot(length(inst_select)/3,3,idx_cv(iter).validation(n))%n
-    plot(intensity{inst_test(n)}); hold on; 
-    plot(dec_values{n},'r');
-    axis([0 length(intensity{inst_test(n)}) -5 9])
-end
+% for n = 1:length(inst_test)
+% 	subplot(length(inst_select)/3,3,idx_cv(iter).validation(n))%n
+%     plot(intensity{inst_test(n)}); hold on; 
+%     plot(dec_values{n},'r');
+%     axis([0 length(intensity{inst_test(n)}) -5 9])
+% end
 
 end % cross-validation
-%% save results
-% save('McMaster/results/ex1_fea1_base2_cv5.mat','theta0','theta','f','eflag','output','g','inst_select','inst_train','inst_test','ry','mse','scale','gamma','dfactor');
-mean(ry_fold)
-mean(mse_fold)
 %% plot intensity
 % close all;
 % for n = 1:length(inst_test)
@@ -249,4 +280,7 @@ mean(mse_fold)
 %     %axis([0 length(idx) -1 6])
 % end
 time = toc(tt);
-
+%% save results
+% save('McMaster/results/ex1_fea1_reg1_cv5.mat','theta0','theta','f','eflag','output','g','inst_select','idx_cv','ry','mse','scale','gamma','dfactor','time','method','solver','scaled','allframes'); %,'inst_train','inst_test'
+mean(ry_fold)
+mean(mse_fold)

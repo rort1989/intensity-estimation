@@ -41,7 +41,7 @@ for s = 1:numel(src.subject)
 end
 
 %%
-inst_select = [1:4 10 12:21];
+inst_select = 1:21;% [1:4 10 12:21];
 for i = 1:length(inst_select)%[1:4 10:12 14:16]%
     subplot(length(inst_select)/3,3,i);
     plot(intensity{inst_select(i)});
