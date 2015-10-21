@@ -20,7 +20,7 @@ solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear t
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-2:2],10.^[0:3]);
+[params_A,params_B] = meshgrid(10.^[-5:0],10.^[0:4]);
 for oter = 1:numel(params_A)
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
@@ -125,7 +125,7 @@ elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1
     option = 2;    max_iter = 200; rho = 0.1; lambda = params_B(oter);
     [w,b,converge,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda); % 
     theta = [w(:); b];
-    if iter == 1         
+    if iter == 1
 %         z(z<0)=0;
 %         0.5*lambda*(w')*w
 %         sum(z(1:72))
@@ -253,10 +253,10 @@ mse_fold(iter,oter) = mse;
 scale_fold(iter,oter) = scale;
 display(sprintf('iteration %d completed',iter));
 %% plot concatenate seq
-subplot(ceil(numel(inst)/5),5,iter)
-plot(test_label); hold on; 
-plot(dec_values,'r');
-% axis([0 length(intensity{inst_test(n)}) -5 9])
+% subplot(ceil(numel(inst)/5),5,iter)
+% plot(test_label); hold on; 
+% plot(dec_values,'r');
+% % axis([0 length(intensity{inst_test(n)}) -5 9])
 
 end % cross-validation
 %% plot intensity
