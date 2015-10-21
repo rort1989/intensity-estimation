@@ -21,7 +21,7 @@ allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all fra
 scaled = 0;
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-5:0],10.^[0:4]);
-for oter = 1:numel(params_A)
+for oter = 1:numel(params_A)%size(params_A,2)%
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
@@ -166,8 +166,8 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [11 1 0.1 1]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
-    configuration = sprintf('-s %d -c %f -p %f -B %d',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+    svm_param = [13 params_A(1,oter) 0.1 1]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+    configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
     model = train(train_label, sparse(train_data_scaled),configuration);
     theta = model.w(:);
 end
@@ -271,6 +271,6 @@ display(sprintf('--grid %d completed',oter))
 end
 time = toc(tt);
 %% save results
-% save('McMaster/results/ex2_fea1_reg1_cv5.mat','theta0','theta','f','eflag','output','g','inst_select','idx_cv','ry','mse','scale','gamma','dfactor','time','method','solver','scaled','allframes'); %,'inst_train','inst_test'
+save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_lot.mat',method,solver,scaled),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
