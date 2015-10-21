@@ -5,9 +5,10 @@ tt = tic;
 % load data
 src = load('McMaster/McMaster.mat','LBP_features','PCA_LBP_features','PSPI','sequence');
 % second experiment: complete dataset
-inst = cell(numel(src.sequence),1); NN = 0;
+subjects = [1:14 16:25]; % sub15 has all 0 PSPI
+inst = cell(numel(subjects),1); NN = 0;
 for i = 1:numel(inst)
-    inst{i} = 1:numel(src.sequence{i});
+    inst{i} = 1:numel(src.sequence{subjects(i)});
     NN = NN + numel(inst{i});
 end
 
@@ -18,7 +19,9 @@ method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. or
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
-
+% grid search for parameters: support up to 2 varing parameters
+[params_A,params_B] = meshgrid(10.^[-2:2],10.^[0:3]);
+for oter = 1:numel(params_A)
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
@@ -26,13 +29,13 @@ intensity = cell(1); % src.PSPI;
 labels = cell(1); % begining, apex, end
 count_inst = 0;
 for s = 1:numel(inst)
-    if ~isempty(inst{s})        
+    if ~isempty(inst{s})
         for n = 1:numel(inst{s})
             count_inst = count_inst + 1;
-            data{count_inst} = src.PCA_LBP_features{s}{inst{s}(n)}'; % features
-            intensity{count_inst} = src.PSPI{s}{inst{s}(n)}'; % pain intensity: a scalar     
+            data{count_inst} = src.PCA_LBP_features{subjects(s)}{inst{s}(n)}'; % features
+            intensity{count_inst} = src.PSPI{subjects(s)}{inst{s}(n)}'; % pain intensity: a scalar     
             id_sub(count_inst) = s;
-        end        
+        end
     end
 end
 inst_train = inst_select(idx_cv(iter).train); 
@@ -117,16 +120,16 @@ elseif solver == 2
     [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, option);
     theta = [w(:); b];
 elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1),epsilon,rho
-    gamma = [1 0.01]; % note that two gammas, one for each loss term
+    gamma = [1 params_A(oter)]; % note that two gammas, one for each loss term
     epsilon = [0.1 1];
-    option = 2;    max_iter = 200; rho = 0.1; lambda = 1000;
+    option = 2;    max_iter = 200; rho = 0.1; lambda = params_B(oter);
     [w,b,converge,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda); % 
-    if iter == 1
-        theta = [w(:); b];
-        z(z<0)=0;
-        0.5*lambda*(w')*w
-        sum(z(1:72))
-        sum(z(73:end))
+    theta = [w(:); b];
+    if iter == 1         
+%         z(z<0)=0;
+%         0.5*lambda*(w')*w
+%         sum(z(1:72))
+%         sum(z(73:end))
     end
 end
 
@@ -245,12 +248,12 @@ e = dec_values - test_label;
 mse = e(:)'*e(:)/length(e);
 [value,apex] = max(test_label);
 scale = dec_values(apex)/value;
-ry_fold(iter) = ry;
-mse_fold(iter) = mse;
-scale_fold(iter) = scale;
+ry_fold(iter,oter) = ry;
+mse_fold(iter,oter) = mse;
+scale_fold(iter,oter) = scale;
 display(sprintf('iteration %d completed',iter));
 %% plot concatenate seq
-subplot(numel(inst)/5,5,iter)
+subplot(ceil(numel(inst)/5),5,iter)
 plot(test_label); hold on; 
 plot(dec_values,'r');
 % axis([0 length(intensity{inst_test(n)}) -5 9])
@@ -264,8 +267,10 @@ end % cross-validation
 %     plot(dec_values{n});
 %     %axis([0 length(idx) -1 6])
 % end
+display(sprintf('--grid %d completed',oter))
+end
 time = toc(tt);
 %% save results
-% save('McMaster/results/ex1_fea1_reg1_cv5.mat','theta0','theta','f','eflag','output','g','inst_select','idx_cv','ry','mse','scale','gamma','dfactor','time','method','solver','scaled','allframes'); %,'inst_train','inst_test'
+% save('McMaster/results/ex2_fea1_reg1_cv5.mat','theta0','theta','f','eflag','output','g','inst_select','idx_cv','ry','mse','scale','gamma','dfactor','time','method','solver','scaled','allframes'); %,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
