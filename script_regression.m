@@ -15,13 +15,13 @@ end
 % second experiment: leave one subject out
 inst_select = 1:NN;
 idx_cv = lot_idx(inst);
-method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
+solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
-scaled = 0;
+scaled = 1;
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-5:0],10.^[0:4]);
-for oter = 1:numel(params_A)%size(params_A,2)%
+[params_A,params_B] = meshgrid(10.^[-5:3],10.^[0:4]);
+for oter = 1:size(params_A,2)%numel(params_A)%
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
@@ -271,6 +271,6 @@ display(sprintf('--grid %d completed',oter))
 end
 time = toc(tt);
 %% save results
-save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_lot.mat',method,solver,scaled),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
+save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
