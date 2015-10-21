@@ -3,7 +3,7 @@ clear all;
 close all;
 tt = tic;
 % load data
-src = load('McMaster/McMaster.mat');
+src = load('McMaster/McMaster.mat','LBP_features','PCA_LBP_features','PSPI','sequence');
 % second experiment: complete dataset
 inst = cell(numel(src.sequence),1); NN = 0;
 for i = 1:numel(inst)
@@ -17,7 +17,7 @@ idx_cv = lot_idx(inst);
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
-scaled = 1;
+scaled = 0;
 
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
@@ -36,12 +36,12 @@ for s = 1:numel(inst)
     end
 end
 inst_train = inst_select(idx_cv(iter).train); 
-inst_test = inst_train;%inst_select(idx_cv(iter).validation); 
+inst_test = inst_select(idx_cv(iter).validation); % inst_train; %
 
 %% feature extraction / dimension reduction / downsampling
 % downsample: if the same intensity level stays for up to dfactor frames,
 % downsample it to one frame
-dfactor = 1;
+dfactor = 10;
 nconstraint = zeros(count_inst,1);
 for n = 1:count_inst
     T = numel(intensity{n});
@@ -116,12 +116,18 @@ elseif solver == 2
     option = 1;
     [w, b, alpha] = osvrtrain(labels(inst_train), data(inst_train), epsilon, gamma, option);
     theta = [w(:); b];
-elseif solver == 3
-    gamma = [1 0.000001]; % note that two gammas, one for each loss term
+elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1),epsilon,rho
+    gamma = [1 0.01]; % note that two gammas, one for each loss term
     epsilon = [0.1 1];
-    option = 1;
-    [w,b,converge] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsion', epsilon, 'option', option);
-    theta = [w(:); b];
+    option = 2;    max_iter = 200; rho = 0.1; lambda = 1000;
+    [w,b,converge,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda); % 
+    if iter == 1
+        theta = [w(:); b];
+        z(z<0)=0;
+        0.5*lambda*(w')*w
+        sum(z(1:72))
+        sum(z(73:end))
+    end
 end
 
 elseif method == 2
