@@ -15,14 +15,14 @@ end
 % second experiment: leave one subject out
 inst_select = 1:NN;
 idx_cv = lot_idx(inst);
-method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
+solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-5:3],10.^[0:4]);
-for oter = 1:size(params_A,2)%numel(params_A)%
-for iter = 1:length(idx_cv)
+for oter = 1%:numel(params_A)%size(params_A,2)%
+for iter = 1%:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
 intensity = cell(1); % src.PSPI;
@@ -39,7 +39,7 @@ for s = 1:numel(inst)
     end
 end
 inst_train = inst_select(idx_cv(iter).train); 
-inst_test = inst_select(idx_cv(iter).validation); % inst_train; %
+inst_test = inst_select(idx_cv(iter).validation); % inst_train; % 
 
 %% feature extraction / dimension reduction / downsampling
 % downsample: if the same intensity level stays for up to dfactor frames,
@@ -122,7 +122,7 @@ elseif solver == 2
 elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1),epsilon,rho
     gamma = [1 params_A(oter)]; % note that two gammas, one for each loss term
     epsilon = [0.1 1];
-    option = 2;    max_iter = 200; rho = 0.1; lambda = params_B(oter);
+    option = 3;    max_iter = 100; rho = 1; lambda = params_B(oter);
     [w,b,converge,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda); % 
     theta = [w(:); b];
     if iter == 1
@@ -253,9 +253,9 @@ mse_fold(iter,oter) = mse;
 scale_fold(iter,oter) = scale;
 display(sprintf('iteration %d completed',iter));
 %% plot concatenate seq
-% subplot(ceil(numel(inst)/5),5,iter)
-% plot(test_label); hold on; 
-% plot(dec_values,'r');
+subplot(ceil(numel(inst)/5),5,iter)
+plot(test_label); hold on; 
+plot(dec_values,'r');
 % % axis([0 length(intensity{inst_test(n)}) -5 9])
 
 end % cross-validation
@@ -271,6 +271,6 @@ display(sprintf('--grid %d completed',oter))
 end
 time = toc(tt);
 %% save results
-save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
+% save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
