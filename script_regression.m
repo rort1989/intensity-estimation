@@ -18,11 +18,11 @@ idx_cv = lot_idx(inst);
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
-scaled = 1;
+scaled = 0;
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-5:3],10.^[0:4]);
-for oter = 1%:numel(params_A)%size(params_A,2)%
-for iter = 1%:length(idx_cv)
+[params_A,params_B] = meshgrid(10.^[-3:2],10.^[0:4]);
+for oter = 1:numel(params_A)%size(params_A,2)%
+for iter = 1:length(idx_cv)
 data = cell(1); % features;
 id_sub = 0; % id of each sub: can use to find number of seq per sub
 intensity = cell(1); % src.PSPI;
@@ -49,7 +49,7 @@ nconstraint = zeros(count_inst,1);
 for n = 1:count_inst
     T = numel(intensity{n});
     slope = diff([-1 intensity{n}]);
-    changepoint = find(slope ~= 0); changepoint = [changepoint T];
+    changepoint = find(slope ~= 0); changepoint = [changepoint T+1];
     idx_select = [];
     for i = 1:length(changepoint)-1
         if changepoint(i+1) - changepoint(i) >= dfactor
@@ -122,8 +122,8 @@ elseif solver == 2
 elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1),epsilon,rho
     gamma = [1 params_A(oter)]; % note that two gammas, one for each loss term
     epsilon = [0.1 1];
-    option = 3;    max_iter = 100; rho = 1; lambda = params_B(oter);
-    [w,b,converge,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda); % 
+    option = 1;    max_iter = 300; rho = 1; lambda = params_B(oter);
+    [w,b,history,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',0); % 
     theta = [w(:); b];
     if iter == 1
 %         z(z<0)=0;
@@ -166,10 +166,10 @@ if solver == 1
     [predict_label, ~, dec_values_train] = svmpredict(train_label, sparse(train_data_scaled), model);
 elseif solver == 2
     % solver: liblinear
-    svm_param = [13 params_A(1,oter) 0.1 1]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+    svm_param = [13 params_A(1,oter) 0.1 -1]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
     configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
     model = train(train_label, sparse(train_data_scaled),configuration);
-    theta = model.w(:);
+    theta = [model.w(:); 0]; %
 end
 
 elseif method == 3 % MAY NEED FURTHER DEBUG THIS PART
@@ -242,20 +242,25 @@ end
 if scaled
     test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
 end
-dec_values =theta'*[test_data; ones(1,size(test_data,2))];
+dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
 RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
 e = dec_values - test_label;
 mse = e(:)'*e(:)/length(e);
 [value,apex] = max(test_label);
 scale = dec_values(apex)/value;
+iters_fold(iter,oter) = history.iter;
 ry_fold(iter,oter) = ry;
 mse_fold(iter,oter) = mse;
 scale_fold(iter,oter) = scale;
 display(sprintf('iteration %d completed',iter));
 %% plot concatenate seq
-subplot(ceil(numel(inst)/5),5,iter)
-plot(test_label); hold on; 
-plot(dec_values,'r');
+% subplot(2,1,1)
+% loglog(1:history.iter,history.s_norm,1:history.iter,history.eps_dual,'r'); title('dual feasibility')
+% subplot(2,1,2)
+% loglog(1:history.iter,history.r_norm,1:history.iter,history.eps_pri,'r'); title('primal feasibility')
+% subplot(ceil(numel(inst)/5),5,iter)
+% plot(test_label); hold on; 
+% plot(dec_values,'r');
 % % axis([0 length(intensity{inst_test(n)}) -5 9])
 
 end % cross-validation
@@ -271,6 +276,6 @@ display(sprintf('--grid %d completed',oter))
 end
 time = toc(tt);
 %% save results
-% save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
+save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','iters_fold','dfactor','time','method','solver','scaled','allframes','params_A','params_B'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
