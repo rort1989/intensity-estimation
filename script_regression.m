@@ -16,9 +16,11 @@ end
 inst_select = 1:NN;
 idx_cv = lot_idx(inst);
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 1; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
+option = 0;
+
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]);
 for oter = 1:numel(params_A)%size(params_A,2)%
@@ -122,7 +124,7 @@ elseif solver == 2
 elseif solver == 3 % grid search on parameters: gamma(2) and lambda, fix gamma(1),epsilon,rho
     gamma = [1 params_A(oter)]; % note that two gammas, one for each loss term
     epsilon = [0.1 1];
-    option = 1;    max_iter = 300; rho = 1; lambda = params_B(oter);
+    option = 3;    max_iter = 300; rho = 1; lambda = params_B(oter);
     [w,b,history,z] = admmosvrtrain(data(inst_train), labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',0); % 
     theta = [w(:); b];
     if iter == 1
@@ -276,6 +278,6 @@ display(sprintf('--grid %d completed',oter))
 end
 time = toc(tt);
 %% save results
-save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes','params_A','params_B'); %,'iters_fold','gamma', 'f','eflag','output','g',,'inst_train','inst_test'
+save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_opt%d_lot.mat',method,solver,scaled,allframes,option),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes','params_A','params_B'); %,'iters_fold','gamma', 'f','eflag','output','g',,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
