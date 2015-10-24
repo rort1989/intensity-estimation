@@ -15,7 +15,7 @@ scaled = 1;
 option = 1; 
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
-%% parameter tuning using validation data
+%% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %0:4
 epsilon = [0.1 1]; max_iter = 300; rho = 1; bias = 1;
