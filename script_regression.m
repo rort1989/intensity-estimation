@@ -16,11 +16,11 @@ end
 inst_select = 1:NN;
 idx_cv = lot_idx(inst);
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+solver = 1; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 0;
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-3:2],10.^[0:4]);
+[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]);
 for oter = 1:numel(params_A)%size(params_A,2)%
 for iter = 1:length(idx_cv)
 data = cell(1); % features;
@@ -101,17 +101,17 @@ if solver == 1
     % define initial parameter of regression model
     rng default;
     theta0 = 0.1*randn(fdim+1,1);%
-    gamma = [0.001 0];  % the second one is regularization coefficient
+    gamma = [params_A(oter) params_B(oter)];  % the second one is regularization coefficient
     % some good config: [0.001 1000] for apex&onset only; [1 100000] for all frames
     % train regression model
     % Solving minimization problem using Matlab optimization toolbox
     options = optimset('GradObj','on','LargeScale','off','MaxIter',1000);
-    [f0,g0] = regressor(theta0,data,labels,gamma);
+%     [f0,g0] = regressor(theta0,data,labels,gamma);
 %     numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0);
 %     err = norm(g0-numgrad);
     [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta,data(inst_train),labels(inst_train),gamma), theta0, options); % _base2
     if iter == length(idx_cv)
-        [ff,gg,fr,fo] = regressor(theta,data(inst_train),labels(inst_train),gamma);
+%         [ff,gg,fr,fo] = regressor(theta,data(inst_train),labels(inst_train),gamma);
     end
 elseif solver == 2
     gamma = [1 0.000001]; % note that two gammas, one for each loss term
@@ -248,7 +248,7 @@ e = dec_values - test_label;
 mse = e(:)'*e(:)/length(e);
 [value,apex] = max(test_label);
 scale = dec_values(apex)/value;
-iters_fold(iter,oter) = history.iter;
+%iters_fold(iter,oter) = history.iter;
 ry_fold(iter,oter) = ry;
 mse_fold(iter,oter) = mse;
 scale_fold(iter,oter) = scale;
@@ -276,6 +276,6 @@ display(sprintf('--grid %d completed',oter))
 end
 time = toc(tt);
 %% save results
-save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','iters_fold','dfactor','time','method','solver','scaled','allframes','params_A','params_B'); %,'gamma', 'f','eflag','output','g',,'inst_train','inst_test'
+save(sprintf('McMaster/results/ex2_m%d_sol%d_scale%d_all%d_lot.mat',method,solver,scaled,allframes),'theta','inst_select','idx_cv','ry_fold','mse_fold','scale_fold','dfactor','time','method','solver','scaled','allframes','params_A','params_B'); %,'iters_fold','gamma', 'f','eflag','output','g',,'inst_train','inst_test'
 mean(ry_fold)
 mean(mse_fold)
