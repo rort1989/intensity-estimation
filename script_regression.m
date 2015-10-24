@@ -12,13 +12,13 @@ method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. or
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
-option = 3; 
+option = 1; 
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %-4:0
-epsilon = [0.1 1]; max_iter = 300; rho = 1; lambda = 1; bias = 0;
+[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %0:4
+epsilon = [0.1 1]; max_iter = 300; rho = 1; bias = 1;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -49,7 +49,7 @@ for iter = 1:length(src.idx_cv)
     else
         data_scaled = data;
     end
-    gamma = [1 params_A(oter)];   lambda = params_B(oter);
+    gamma = [1 params_A(oter) ];   lambda = params_B(oter);
     if solver == 1  % note that two gammas: the second one is regularization coefficient  
         %     [f0,g0] = regressor(theta0,data,labels,gamma); numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0); err = norm(g0-numgrad);
         [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options); % _base2
@@ -92,7 +92,11 @@ tt = tic;
 % retrain model using training + validation data
 inst_train = union(src.idx_cv(1).train,src.idx_cv(1).validation);
 inst_test = src.idx_test;
-[~,opt] = max(mean(ry_fold)); % or mse_fold
+if iter == 1
+    [~,opt] = max(ry_fold);
+else
+    [~,opt] = max(mean(ry_fold)); % or mse_fold
+end
 N = length(inst_train);
 train_data = [];
 for n = 1:N
