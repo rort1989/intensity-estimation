@@ -3,11 +3,11 @@ clear all;
 close all;
 tt = tic;
 %% load data
-src = load('CK/standard.mat','features','labels','idx_cv','idx_test','dfactor'); % ,'intensity'
+src = load('CK/standard.mat','feature','intensity','idx_cv','idx_test','dfactor'); % ,'intensity'
 
 % define constants
-labels = src.labels;
-data = src.features;
+data = src.feature;
+labels = cell(1,numel(data));
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
@@ -19,6 +19,15 @@ options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = z
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %-4:0
 epsilon = [0.1 1]; max_iter = 300; rho = 1; lambda = 1; bias = 0;
+if ~allframes
+    for n = 1:numel(data)
+        labels{n}(1,:) = src.intensity{n}(1,:);
+        labels{n}(2,2) = max(src.intensity{n}(:,2));  labels{n}(2,1) = find(src.intensity{n}(:,2)==labels{n}(2,2),1,'first'); % 'last's
+        labels{n}(3,:) = src.intensity{n}(end,:);
+    end
+else
+    labels = src.intensity;
+end
 
 for oter = 1:numel(params_A)
 for iter = 1:length(src.idx_cv)
@@ -58,7 +67,7 @@ for iter = 1:length(src.idx_cv)
     test_label = [];
     for n = 1:length(inst_test)
         test_data = [test_data data{inst_test(n)}];
-        test_label = [test_label labels{inst_test(n)}(:,2)']; % intensity
+        test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
         test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
@@ -114,16 +123,16 @@ test_data = [];
 test_label = [];
 for n = 1:length(inst_test)
     test_data = [test_data data{inst_test(n)}];
-    test_label = [test_label labels{inst_test(n)}(:,2)']; % intensity
+    test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
 end
 if scaled
     test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
 end
 dec_values =theta'*[test_data; ones(1,size(test_data,2))]; 
-RR = corrcoef(dec_values,test_label);  ry_test = RR(1,2);
+RR = corrcoef(dec_values,test_label);  ry_test = RR(1,2)
 e = dec_values - test_label;
 abs_test = sum(abs(e))/length(e);
-mse_test = e(:)'*e(:)/length(e);
+mse_test = e(:)'*e(:)/length(e)
 time = toc(tt);
 display('testing completed');
 
