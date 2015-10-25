@@ -3,7 +3,7 @@ clear all;
 close all;
 tt = tic;
 %% load data
-src = load('CK/standard.mat','feature','intensity','idx_cv','idx_test','dfactor'); % ,'intensity'
+src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','dfactor'); % ,'intensity'
 
 % define constants
 data = src.feature;
@@ -12,13 +12,13 @@ method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. or
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
-option = 1; 
+option = 3; 
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %0:4
-epsilon = [0.1 1]; max_iter = 300; rho = 1; bias = 1;
+[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %-4:0    0:4
+epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -31,7 +31,7 @@ end
 
 for oter = 1:numel(params_A)
 for iter = 1:length(src.idx_cv)
-    inst_train = src.idx_cv(iter).train; 
+    inst_train = src.idx_cv(iter).train;
     inst_test = src.idx_cv(iter).validation;
     % regressin and ordinal
     N = length(inst_train);
@@ -40,6 +40,7 @@ for iter = 1:length(src.idx_cv)
         train_data = [train_data data{inst_train(n)}]; % should use all frames of all sequences
     end
     if scaled
+        data_scaled = cell(1);
         scale_max = max(train_data,[],2);
         scale_min = min(train_data,[],2);
         for n = 1:N
@@ -103,6 +104,7 @@ for n = 1:N
     train_data = [train_data data{inst_train(n)}]; % should use all frames of all sequences
 end
 if scaled
+    data_scaled = cell(1);
     scale_max = max(train_data,[],2);
     scale_min = min(train_data,[],2);
     for n = 1:N
