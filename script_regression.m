@@ -48,6 +48,8 @@ for iter = 1:length(src.idx_cv)
             pairs(count+1:count+i-1,2) = [i-1:-1:1]';
             count = count + i-1;
         end
+        train_label = [train_label; ones(count,1)];
+        count_half = count;
         if apx < T
             for i = apx:T
                 pairs(count+1:count+T-i,1) = i;
@@ -57,7 +59,7 @@ for iter = 1:length(src.idx_cv)
         end
         pairs = pairs(1:count,:);
         train_data = [train_data data{inst_train(n)}(:,pairs(:,1)) - data{inst_train(n)}(:,pairs(:,2))];
-        train_label = [train_label; ones(count,1)];
+        train_label = [train_label; 2*ones(count-count_half,1)];
     end
     % optional scaling may be performed
     if scaled
@@ -72,13 +74,13 @@ for iter = 1:length(src.idx_cv)
     if solver == 1% solver: libsvm
         svm_param = [0 0 1 1]; % L2-regularized hinge loss, cost coefficient 1
         configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-        model = svmtrain(train_label, sparse(train_data_scaled),configuration);
+        model = svmtrain(train_label, sparse(train_data_scaled'),configuration);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
         theta = -[w(:); b];        
     elseif solver == 2        % solver: liblinear
         svm_param = [3 params_A(oter) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
-        model = train(train_label, sparse(train_data_scaled),configuration);
+        model = train(train_label, sparse(train_data_scaled'),configuration);
         theta = -[model.w(:)];
     end
     
@@ -131,7 +133,9 @@ N = length(inst_train);
             pairs(count+1:count+i-1,1) = i;
             pairs(count+1:count+i-1,2) = [i-1:-1:1]';
             count = count + i-1;
-        end
+        end        
+        train_label = [train_label; ones(count,1)];
+        count_half = count;
         if apx < T
             for i = apx:T
                 pairs(count+1:count+T-i,1) = i;
@@ -141,7 +145,7 @@ N = length(inst_train);
         end
         pairs = pairs(1:count,:);
         train_data = [train_data data{inst_train(n)}(:,pairs(:,1)) - data{inst_train(n)}(:,pairs(:,2))];
-        train_label = [train_label; ones(count,1)];
+        train_label = [train_label; 2*ones(count-count_half,1)];
     end
     % optional scaling may be performed
     if scaled
@@ -156,13 +160,13 @@ N = length(inst_train);
     if solver == 1% solver: libsvm
         svm_param = [0 0 1 1]; % L2-regularized hinge loss, cost coefficient 1
         configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-        model = svmtrain(train_label, sparse(train_data_scaled),configuration);
+        model = svmtrain(train_label, sparse(train_data_scaled'),configuration);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
         theta = -[w(:); b];        
     elseif solver == 2        % solver: liblinear
         svm_param = [3 params_A(opt) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
-        model = train(train_label, sparse(train_data_scaled),configuration);
+        model = train(train_label, sparse(train_data_scaled'),configuration);
         theta = -[model.w(:)];
     end
 % testing
