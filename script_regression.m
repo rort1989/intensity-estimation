@@ -12,13 +12,13 @@ method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. or
 solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 1; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
-option = 0; 
+option = 1; 
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 params_A = 10.^[-5:4];
-epsilon = [0.1 1]; max_iter = 300; bias = 1;
+epsilon = [0.1 1]; max_iter = 300; bias = 0;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -61,7 +61,7 @@ for iter = 1:length(src.idx_cv)
         svm_param = [13 params_A(oter) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
         configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
         model = train(train_label, sparse(train_data_scaled), configuration);
-        theta = model.w(:); if bias <= 0,  theta = [theta; 0]; end
+        theta = model.w(:);
     end    
 
    %% validation: compute the prediction intensity given testing frame and learned model
@@ -75,7 +75,7 @@ for iter = 1:length(src.idx_cv)
     if scaled
         test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
     end
-    dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
+    dec_values = theta'*[test_data; ones(1,size(test_data,2))]; %
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
     e = dec_values - test_label;
     mse = e(:)'*e(:)/length(e);
