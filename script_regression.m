@@ -182,12 +182,14 @@ N = length(inst_train);
     dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
     e = dec_values - test_label;
+    abs_test = sum(abs(e));
     mse = e(:)'*e(:)/length(e);
-    ry_fold(iter,oter) = ry;
-    mse_fold(iter,oter) = mse;
+    ry_test = ry;
+    mse_test = mse;
  
+time = toc(tt); 
 display('testing completed');
- 
+
 %% plot concatenate seq
 if solver == 3
     subplot(2,1,1)
