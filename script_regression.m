@@ -8,17 +8,17 @@ src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','df
 % define constants
 data = src.feature;
 labels = cell(1,numel(data));
-method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
-allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
+solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+allframes = 1; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
-option = 3; 
+option = 0; 
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %-4:0    0:4
-epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
+params_A = 10.^[-5:4];
+epsilon = [0.1 1]; max_iter = 300; bias = 1;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -33,36 +33,38 @@ for oter = 1:numel(params_A)
 for iter = 1:length(src.idx_cv)
     inst_train = src.idx_cv(iter).train;
     inst_test = src.idx_cv(iter).validation;
-    % regressin and ordinal
+    % SVR formulation: regression loss only with regularization
     N = length(inst_train);
     train_data = [];
+    train_label = [];
     for n = 1:N
-        train_data = [train_data data{inst_train(n)}]; % should use all frames of all sequences
+        train_data = [train_data; data{inst_train(n)}(:,labels{inst_train(n)}(:,1))'];
+        train_label = [train_label; labels{inst_train(n)}(:,2)];
     end
+    % optional scaling may be performed
     if scaled
-        data_scaled = cell(1);
-        scale_max = max(train_data,[],2);
-        scale_min = min(train_data,[],2);
-        for n = 1:N
-            temp = bsxfun(@minus, data{inst_train(n)}, scale_min);
-            data_scaled{n} = bsxfun(@rdivide, temp, scale_max-scale_min);
-        end
+        scale_max = max(train_data);
+        scale_min = min(train_data);
+        temp = bsxfun(@minus, train_data, scale_min); %data_together % ATTENTION: NOT data_together
+        train_data_scaled = bsxfun(@rdivide, temp, scale_max-scale_min); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
     else
-        data_scaled = data;
+        train_data_scaled = train_data;
     end
-    gamma = [1 params_A(oter) ];   lambda = params_B(oter);
-    if solver == 1  % note that two gammas: the second one is regularization coefficient  
-        %     [f0,g0] = regressor(theta0,data,labels,gamma); numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0); err = norm(g0-numgrad);
-        [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options); % _base2
-    elseif solver == 2         % note that two gammas, one for each loss term        
-        [w, b, alpha] = osvrtrain(labels(inst_train), data_scaled, epsilon, gamma, option);
-        theta = [w(:); b];
-    elseif solver == 3 % grid search on parameters: gamma(1,2) (one for each loss term) and, fix lambda,epsilon,rho        
-        [w,b,history,z] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
-        theta = [w(:); b];
-    end
+    
+    % define initial parameter of regression model
+    if solver == 1        % solver: libsvm
+        svm_param = [3 0 1 0.1]; % L2-regularized hinge-loss, linear kernel, gamma coefficient for kernel, tolerence 0.1
+        configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+        model = svmtrain(train_label, sparse(train_data_scaled),configuration);
+        w = model.SVs' * model.sv_coef; b = -model.rho;    theta = [w(:); b];
+    elseif solver == 2       % solver: liblinear
+        svm_param = [13 params_A(oter) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+        configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+        model = train(train_label, sparse(train_data_scaled), configuration);
+        theta = model.w(:); if bias <= 0,  theta = [theta; 0]; end
+    end    
 
-    %% validation: compute the prediction intensity given testing frame and learned model
+   %% validation: compute the prediction intensity given testing frame and learned model
     % alternative: concatenate all testing frames
     test_data = [];
     test_label = [];
@@ -71,13 +73,12 @@ for iter = 1:length(src.idx_cv)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
-        test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
+        test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
     e = dec_values - test_label;
     mse = e(:)'*e(:)/length(e);
-    %iters_fold(iter,oter) = history.iter;
     ry_fold(iter,oter) = ry;
     mse_fold(iter,oter) = mse;
     display(sprintf('validation iteration %d completed',iter));
@@ -100,30 +101,31 @@ else
 end
 N = length(inst_train);
 train_data = [];
+train_label = [];
 for n = 1:N
-    train_data = [train_data data{inst_train(n)}]; % should use all frames of all sequences
+    train_data = [train_data; data{inst_train(n)}(:,labels{inst_train(n)}(:,1))'];
+    train_label = [train_label; labels{inst_train(n)}(:,2)];
 end
 if scaled
-    data_scaled = cell(1);
-    scale_max = max(train_data,[],2);
-    scale_min = min(train_data,[],2);
-    for n = 1:N
-        temp = bsxfun(@minus, data{inst_train(n)}, scale_min);
-        data_scaled{n} = bsxfun(@rdivide, temp, scale_max-scale_min);
-    end
+    scale_max = max(train_data);
+    scale_min = min(train_data);
+    temp = bsxfun(@minus, train_data, scale_min); %data_together % ATTENTION: NOT data_together
+    train_data_scaled = bsxfun(@rdivide, temp, scale_max-scale_min); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
 else
-    data_scaled = data;
+    train_data_scaled = train_data;
 end
-gamma = [1 params_A(opt) ]; lambda = params_B(opt);
-if solver == 1  % note that two gammas: the second one is regularization coefficient    
-    [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options);
-elseif solver == 2         % note that two gammas, one for each loss term        
-    [w, b, alpha] = osvrtrain(labels(inst_train), data_scaled, epsilon, gamma, option);
-    theta = [w(:); b];
-elseif solver == 3 % grid search on parameters: gamma(1,2) (one for each loss term) and, fix lambda,epsilon,rho        
-    [w,b,history,z] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
-    theta = [w(:); b];
+if solver == 1        % solver: libsvm
+        svm_param = [3 0 1 0.1]; % L2-regularized hinge-loss, linear kernel, gamma coefficient for kernel, tolerence 0.1
+        configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+        model = svmtrain(train_label, sparse(train_data_scaled),configuration);
+        w = model.SVs' * model.sv_coef; b = -model.rho;    theta = [w(:); b];
+elseif solver == 2       % solver: liblinear
+        svm_param = [13 params_A(oter) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+        configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
+        model = train(train_label, sparse(train_data_scaled), configuration);
+        theta = model.w(:); if bias <= 0,  theta = [theta; 0]; end
 end
+
 % perform testing
 test_data = [];
 test_label = [];
@@ -132,7 +134,7 @@ for n = 1:length(inst_test)
     test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
 end
 if scaled
-    test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
+    test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
 end
 dec_values =theta'*[test_data; ones(1,size(test_data,2))]; 
 RR = corrcoef(dec_values,test_label);  ry_test = RR(1,2)
@@ -156,4 +158,4 @@ end
 
 %% save results
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d.mat',method,solver,scaled,allframes,option), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
+    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias');
