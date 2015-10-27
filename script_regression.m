@@ -21,7 +21,8 @@ params_A = 10.^[-5:4];
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
-        labels{n}(2,2) = max(src.intensity{n}(:,2));  labels{n}(2,1) = find(src.intensity{n}(:,2)==labels{n}(2,2),1,'first'); % 'last's
+        labels{n}(2,2) = max(src.intensity{n}(:,2));    idx_cand = find(src.intensity{n}(:,2)==labels{n}(2,2));        
+        labels{n}(2,1) = idx_cand(max(1,ceil(length(idx_cand)/2)));
         labels{n}(3,:) = src.intensity{n}(end,:);
     end
 else
