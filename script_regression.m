@@ -39,8 +39,9 @@ for iter = 1:length(src.idx_cv)
     train_label = [];
     % formalize the pairwise data
     for n = 1:N
-        [~,idx] = max(labels{inst_train(n)}(:,2)); % index of apex frame
-        apx = labels{inst_train(n)}(idx,1);
+        peak = max(labels{inst_train(n)}(:,2)); % index of apex frame
+        idx = find(labels{inst_train(n)}(:,2)==peak);
+        apx = labels{inst_train(n)}(idx(max(1,ceil(length(idx)/2))),1);
         [~,T] = size(data{inst_train(n)});
         pairs = zeros(T*(T+1)/2,2);
         count = 0;
@@ -77,12 +78,12 @@ for iter = 1:length(src.idx_cv)
         configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
         model = svmtrain(train_label, sparse(train_data_scaled'),configuration);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
-        theta = -[w(:); b];        
+        theta = [w(:); b];        
     elseif solver == 2        % solver: liblinear
         svm_param = [2 params_A(oter) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
         model = train(train_label, sparse(train_data_scaled'),configuration);
-        theta = -[model.w(:)];
+        theta = [model.w(:)];
     end
     
     %% validation: compute the prediction intensity given testing frame and learned model
@@ -128,8 +129,9 @@ for iter = 1:length(src.idx_test)
     train_label = [];
     % formalize the pairwise data
     for n = 1:N
-        [~,idx] = max(labels{inst_train(n)}(:,2)); % index of apex frame
-        apx = labels{inst_train(n)}(idx,1);
+        peak = max(labels{inst_train(n)}(:,2)); % index of apex frame
+        idx = find(labels{inst_train(n)}(:,2)==peak);
+        apx = labels{inst_train(n)}(idx(max(1,ceil(length(idx)/2))),1);
         [~,T] = size(data{inst_train(n)});
         pairs = zeros(T*(T+1)/2,2);
         count = 0;
@@ -166,12 +168,12 @@ for iter = 1:length(src.idx_test)
         configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
         model = svmtrain(train_label, sparse(train_data_scaled'),configuration);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
-        theta = -[w(:); b];        
+        theta = [w(:); b];        
     elseif solver == 2        % solver: liblinear
         svm_param = [2 params_A(opt) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
         model = train(train_label, sparse(train_data_scaled'),configuration);
-        theta = -[model.w(:)];
+        theta = [model.w(:)];
     end
     % testing
     test_data = [];
