@@ -17,7 +17,7 @@ options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = z
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-3:3],10.^[-3:3]); %    0:4
+[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %  -3:3  
 epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
 if ~allframes
     for n = 1:numel(data)
@@ -50,7 +50,7 @@ for iter = 1:length(src.idx_cv)
     else
         data_scaled = data(inst_train);
     end
-    gamma = [params_A(oter) params_B(oter)];   lambda = 1;
+    gamma = [ 1 params_A(oter) ];   lambda = params_B(oter);
     if solver == 1  % note that two gammas: the second one is regularization coefficient  
         %     [f0,g0] = regressor(theta0,data,labels,gamma); numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0); err = norm(g0-numgrad);
         [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options); % _base2
@@ -92,12 +92,12 @@ time_validation = toc(tt);
 % identify the best model parameter
 tt = tic;
 if iter == 1
-        [~,opt] = min(abs_fold);%max(ry_fold);
+        [~,opt] = max(ry_fold);%min(abs_fold);%
     else
-        [~,opt] = min(abs_fold);%max(mean(ry_fold)); % or mse_fold
+        [~,opt] = max(mean(ry_fold)); %min(abs_fold);% or mse_fold
 end
-gamma = [params_A(opt) params_B(opt)]
-lambda = 1 ;
+gamma = [1 params_A(opt) ]
+lambda = params_B(opt)
 % retrain model using training + validation data
 for iter = 1:length(src.idx_test)
     inst_train = src.idx_test(iter).train;
