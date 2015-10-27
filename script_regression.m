@@ -211,4 +211,4 @@ mean(ry_test)
 mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias');
+    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','svm_param','inst_train','inst_test','bias');
