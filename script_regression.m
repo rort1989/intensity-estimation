@@ -77,7 +77,8 @@ for iter = 1:length(src.idx_cv)
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
     e = dec_values - test_label;
     mse = e(:)'*e(:)/length(e);
-    %iters_fold(iter,oter) = history.iter;
+    abs_fold(iter,oter) = sum(abs(e))/length(e);
+    iters_fold(iter,oter) = history.iter;
     ry_fold(iter,oter) = ry;
     mse_fold(iter,oter) = mse;
     %display(sprintf('validation iteration %d completed',iter));
@@ -91,9 +92,9 @@ time_validation = toc(tt);
 % identify the best model parameter
 tt = tic;
 if iter == 1
-        [~,opt] = max(ry_fold);
+        [~,opt] = min(abs_fold);%max(ry_fold);
     else
-        [~,opt] = max(mean(ry_fold)); % or mse_fold
+        [~,opt] = min(abs_fold);%max(mean(ry_fold)); % or mse_fold
 end
 gamma = [params_A(opt) params_B(opt)]
 lambda = 1 ;
@@ -162,4 +163,4 @@ mean(ry_test)
 mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
+    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
