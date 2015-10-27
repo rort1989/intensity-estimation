@@ -12,12 +12,12 @@ method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. or
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
-option = 3; 
+option = 1;
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %-4:0    0:4
+[params_A,params_B] = meshgrid(10.^[-3:3],10.^[-3:3]); %    0:4
 epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
 if ~allframes
     for n = 1:numel(data)
@@ -48,9 +48,9 @@ for iter = 1:length(src.idx_cv)
             data_scaled{n} = bsxfun(@rdivide, temp, scale_max-scale_min);
         end
     else
-        data_scaled = data;
+        data_scaled = data(inst_train);
     end
-    gamma = [1 params_A(oter) ];   lambda = params_B(oter);
+    gamma = [params_A(oter) params_B(oter)];   lambda = 1;
     if solver == 1  % note that two gammas: the second one is regularization coefficient  
         %     [f0,g0] = regressor(theta0,data,labels,gamma); numgrad = computeNumericalGradient(@(theta) regressor(theta,data,labels,gamma), theta0); err = norm(g0-numgrad);
         [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options); % _base2
@@ -80,68 +80,71 @@ for iter = 1:length(src.idx_cv)
     %iters_fold(iter,oter) = history.iter;
     ry_fold(iter,oter) = ry;
     mse_fold(iter,oter) = mse;
-    display(sprintf('validation iteration %d completed',iter));
+    %display(sprintf('validation iteration %d completed',iter));
 
 end
-display(sprintf('--grid %d completed',oter))
+display(sprintf('--grid search %d completed',oter))
 end  % cross-validation
 time_validation = toc(tt);
-tt = tic;
 
 %% re-train model and test on testing data 
 % identify the best model parameter
-% retrain model using training + validation data
-inst_train = union(src.idx_cv(1).train,src.idx_cv(1).validation);
-inst_test = src.idx_test;
+tt = tic;
 if iter == 1
-    [~,opt] = max(ry_fold);
-else
-    [~,opt] = max(mean(ry_fold)); % or mse_fold
+        [~,opt] = max(ry_fold);
+    else
+        [~,opt] = max(mean(ry_fold)); % or mse_fold
 end
-N = length(inst_train);
-train_data = [];
-for n = 1:N
-    train_data = [train_data data{inst_train(n)}]; % should use all frames of all sequences
-end
-if scaled
-    data_scaled = cell(1);
-    scale_max = max(train_data,[],2);
-    scale_min = min(train_data,[],2);
+gamma = [params_A(opt) params_B(opt)]
+lambda = 1 ;
+% retrain model using training + validation data
+for iter = 1:length(src.idx_test)
+    inst_train = src.idx_test(iter).train;
+    inst_test = src.idx_test(iter).validation;    
+    N = length(inst_train);
+    train_data = [];
     for n = 1:N
-        temp = bsxfun(@minus, data{inst_train(n)}, scale_min);
-        data_scaled{n} = bsxfun(@rdivide, temp, scale_max-scale_min);
+        train_data = [train_data data{inst_train(n)}]; % should use all frames of all sequences
     end
-else
-    data_scaled = data;
+    if scaled
+        data_scaled = cell(1);
+        scale_max = max(train_data,[],2);
+        scale_min = min(train_data,[],2);
+        for n = 1:N
+            temp = bsxfun(@minus, data{inst_train(n)}, scale_min);
+            data_scaled{n} = bsxfun(@rdivide, temp, scale_max-scale_min);
+        end
+    else
+        data_scaled = data(inst_train);
+    end
+    if solver == 1  % note that two gammas: the second one is regularization coefficient
+        [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options);
+    elseif solver == 2         % note that two gammas, one for each loss term
+        [w, b, alpha] = osvrtrain(labels(inst_train), data_scaled, epsilon, gamma, option);
+        theta = [w(:); b];
+    elseif solver == 3 % grid search on parameters: gamma(1,2) (one for each loss term) and, fix lambda,epsilon,rho
+        [w,b,history,z] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
+        theta = [w(:); b];
+    end
+    % perform testing
+    test_data = [];
+    test_label = [];
+    for n = 1:length(inst_test)
+        test_data = [test_data data{inst_test(n)}];
+        test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
+    end
+    if scaled
+        test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
+    end
+    dec_values =theta'*[test_data; ones(1,size(test_data,2))];
+    RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
+    e = dec_values - test_label;
+    abs_test(iter) = sum(abs(e))/length(e);
+    mse_test(iter) = e(:)'*e(:)/length(e);
+    time = toc(tt);
+    display(sprintf('testing iteration %d completed',iter));
 end
-gamma = [1 params_A(opt) ]; lambda = params_B(opt);
-if solver == 1  % note that two gammas: the second one is regularization coefficient    
-    [theta,f,eflag,output,g] = fminunc(@(theta) regressor(theta, data_scaled, labels(inst_train), gamma), theta0, options);
-elseif solver == 2         % note that two gammas, one for each loss term        
-    [w, b, alpha] = osvrtrain(labels(inst_train), data_scaled, epsilon, gamma, option);
-    theta = [w(:); b];
-elseif solver == 3 % grid search on parameters: gamma(1,2) (one for each loss term) and, fix lambda,epsilon,rho        
-    [w,b,history,z] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
-    theta = [w(:); b];
-end
-% perform testing
-test_data = [];
-test_label = [];
-for n = 1:length(inst_test)
-    test_data = [test_data data{inst_test(n)}];
-    test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
-end
-if scaled
-    test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
-end
-dec_values =theta'*[test_data; ones(1,size(test_data,2))]; 
-RR = corrcoef(dec_values,test_label);  ry_test = RR(1,2)
-e = dec_values - test_label;
-abs_test = sum(abs(e))/length(e);
-mse_test = e(:)'*e(:)/length(e)
-time = toc(tt);
 display('testing completed');
-
 %% plot concatenate seq
 if solver == 3
     subplot(2,1,1)
@@ -155,5 +158,8 @@ end
 % % axis([0 length(intensity{inst_test(n)}) -5 9])
 
 %% save results
-save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d.mat',method,solver,scaled,allframes,option), ...
+mean(ry_test)
+mean(mse_test)
+mean(abs_test)
+save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
     'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
