@@ -18,7 +18,7 @@ options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = z
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %  -3:3  
-epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
+epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 0;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -101,7 +101,7 @@ lambda = params_B(opt)
 % retrain model using training + validation data
 for iter = 1:length(src.idx_test)
     inst_train = src.idx_test(iter).train;
-    inst_test = src.idx_test(iter).validation;    
+    inst_test = src.idx_test(iter).validation; % train
     N = length(inst_train);
     train_data = [];
     for n = 1:N
@@ -144,19 +144,21 @@ for iter = 1:length(src.idx_test)
     mse_test(iter) = e(:)'*e(:)/length(e);
     time = toc(tt);
     display(sprintf('testing iteration %d completed',iter));
+    subplot(ceil(numel(src.idx_test)/5),5,iter)
+    plot(test_label); hold on; 
+    plot(dec_values,'r');
+    axis([0 length(test_label) -5 9])
+
 end
 display('testing completed');
 %% plot concatenate seq
 if solver == 3
+    figure;
     subplot(2,1,1)
     loglog(1:history.iter,history.s_norm,1:history.iter,history.eps_dual,'r'); title('dual feasibility')
     subplot(2,1,2)
     loglog(1:history.iter,history.r_norm,1:history.iter,history.eps_pri,'r'); title('primal feasibility')
 end
-% subplot(ceil(numel(inst)/5),5,iter)
-% plot(test_label); hold on; 
-% plot(dec_values,'r');
-% % axis([0 length(intensity{inst_test(n)}) -5 9])
 
 %% save results
 mean(ry_test)
