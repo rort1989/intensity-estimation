@@ -13,11 +13,11 @@ solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear t
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
 option = 0; % for bias
- 
+max_iter = 300; bias = 0; 
+
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 params_A = 10.^[-5:4];
-max_iter = 300; bias = 1;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -78,7 +78,7 @@ for iter = 1:length(src.idx_cv)
         w = model.SVs' * model.sv_coef;        b = -model.rho;
         theta = -[w(:); b];        
     elseif solver == 2        % solver: liblinear
-        svm_param = [3 params_A(oter) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
+        svm_param = [2 params_A(oter) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
         model = train(train_label, sparse(train_data_scaled'),configuration);
         theta = -[model.w(:)];
@@ -99,6 +99,7 @@ for iter = 1:length(src.idx_cv)
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
     e = dec_values - test_label;
     mse = e(:)'*e(:)/length(e);
+    abs_fold(iter,oter) = sum(abs(e))/length(e);
     ry_fold(iter,oter) = ry;
     mse_fold(iter,oter) = mse;
     display(sprintf('validation iteration %d completed',iter));
@@ -111,15 +112,17 @@ tt = tic;
  
 %% re-train model and test on testing data 
 % identify the best model parameter
-% retrain model using training + validation data
-inst_train = union(src.idx_cv(1).train,src.idx_cv(1).validation);
-inst_test = src.idx_test;
 if iter == 1
     [~,opt] = max(ry_fold);
 else
     [~,opt] = max(mean(ry_fold)); % or mse_fold
 end
-N = length(inst_train);
+params_A(opt)
+% retrain model using training + validation data
+for iter = 1:length(src.idx_test)    
+    inst_train = src.idx_test(iter).train;
+    inst_test = src.idx_test(iter).validation; %train
+    N = length(inst_train);
     train_data = [];
     train_label = [];
     % formalize the pairwise data
@@ -164,12 +167,12 @@ N = length(inst_train);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
         theta = -[w(:); b];        
     elseif solver == 2        % solver: liblinear
-        svm_param = [3 params_A(opt) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
+        svm_param = [2 params_A(opt) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
         model = train(train_label, sparse(train_data_scaled'),configuration);
         theta = -[model.w(:)];
     end
-% testing
+    % testing
     test_data = [];
     test_label = [];
     for n = 1:length(inst_test)
@@ -180,28 +183,32 @@ N = length(inst_train);
         test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
-    RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
+    RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
     e = dec_values - test_label;
-    abs_test = sum(abs(e));
+    abs_test(iter) = sum(abs(e))/length(e);
     mse = e(:)'*e(:)/length(e);
-    ry_test = ry;
-    mse_test = mse;
- 
+    mse_test(iter) = mse;
+    display(sprintf('testing iteration %d completed',iter));
+    subplot(ceil(numel(src.idx_test)/5),5,iter)
+    plot(test_label); hold on;
+    plot(dec_values,'r');
+    axis([0 length(test_label) -5 9])
+end
 time = toc(tt); 
 display('testing completed');
 
 %% plot concatenate seq
 if solver == 3
+    figure
     subplot(2,1,1)
     loglog(1:history.iter,history.s_norm,1:history.iter,history.eps_dual,'r'); title('dual feasibility')
     subplot(2,1,2)
     loglog(1:history.iter,history.r_norm,1:history.iter,history.eps_pri,'r'); title('primal feasibility')
 end
-% subplot(ceil(numel(inst)/5),5,iter)
-% plot(test_label); hold on; 
-% plot(dec_values,'r');
-% % axis([0 length(intensity{inst_test(n)}) -5 9])
  
 %% save results
-save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d.mat',method,solver,scaled,allframes,option), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias');
+mean(ry_test)
+mean(mse_test)
+mean(abs_test)
+save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
+    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias');
