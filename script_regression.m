@@ -22,7 +22,8 @@ epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
-        labels{n}(2,2) = max(src.intensity{n}(:,2));  labels{n}(2,1) = find(src.intensity{n}(:,2)==labels{n}(2,2),1,'first'); % 'last's
+        labels{n}(2,2) = max(src.intensity{n}(:,2));  idx_cand = find(src.intensity{n}(:,2)==labels{n}(2,2));        
+        labels{n}(2,1) = idx_cand(max(1,ceil(length(idx_cand)/2)));
         labels{n}(3,:) = src.intensity{n}(end,:);
     end
 else
@@ -164,5 +165,5 @@ end
 mean(ry_test)
 mean(mse_test)
 mean(abs_test)
-save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
+% save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
+%     'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
