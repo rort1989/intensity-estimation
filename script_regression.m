@@ -17,7 +17,7 @@ options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = z
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
-[params_A,params_B] = meshgrid(10.^[-4:0],10.^[0:4]); %  -3:3  
+[params_A,params_B] = meshgrid(10.^[0],10.^[0:4]); %  -3:3  
 epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 0;
 if ~allframes
     for n = 1:numel(data)
@@ -58,7 +58,7 @@ for iter = 1:length(src.idx_cv)
         [w, b, alpha] = osvrtrain(labels(inst_train), data_scaled, epsilon, gamma, option);
         theta = [w(:); b];
     elseif solver == 3 % grid search on parameters: gamma(1,2) (one for each loss term) and, fix lambda,epsilon,rho        
-        [w,b,history,z] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
+        [w,b,history,z,loss] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
         theta = [w(:); b];
     end
 
@@ -124,7 +124,7 @@ for iter = 1:length(src.idx_test)
         [w, b, alpha] = osvrtrain(labels(inst_train), data_scaled, epsilon, gamma, option);
         theta = [w(:); b];
     elseif solver == 3 % grid search on parameters: gamma(1,2) (one for each loss term) and, fix lambda,epsilon,rho
-        [w,b,history,z] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
+        [w,b,history,z,loss] = admmosvrtrain(data_scaled, labels(inst_train), gamma, 'epsilon', epsilon, 'option', option, 'max_iter', max_iter, 'rho', rho, 'lambda', lambda,'bias',bias); %
         theta = [w(:); b];
     end
     % perform testing
