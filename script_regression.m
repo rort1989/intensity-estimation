@@ -11,7 +11,7 @@ labels = cell(1,numel(data));
 method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 scaled = 1;
-allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+allframes = 1; % 0: use only apex and begin/end frames in labels; 1: use all frames
 option = 1;  loss_func = [13 12]; % 1: L1-loss; 2: L2-loss; all solved by dual formulation
 bias = 1;
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
