@@ -18,7 +18,7 @@ options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = z
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 params_A = 10.^[-5:4];
-epsilon = [0.1 1]; max_iter = 300; bias = 0;
+epsilon = [0.1 1]; max_iter = 300; bias = 1;
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -74,7 +74,8 @@ for iter = 1:length(src.idx_cv)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
-        test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
+        temp = bsxfun(@minus, test_data, scale_min');
+        test_data = bsxfun(@rdivide, temp, scale_max'-scale_min');
     end
     dec_values = theta'*[test_data; ones(1,size(test_data,2))]; %
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
@@ -138,7 +139,8 @@ for iter = 1:length(src.idx_test)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
-        test_data = bsxfun(@rdivide, test_data, scale_max'-scale_min');
+        temp = bsxfun(@minus, test_data, scale_min');
+        test_data = bsxfun(@rdivide, temp, scale_max'-scale_min');
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))];
     RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
