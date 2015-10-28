@@ -10,15 +10,16 @@ data = src.feature;
 labels = cell(1,numel(data));
 method = 2; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
-allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
-option = 0; 
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+option = 1;  loss_func = [13 12]; % 1: L1-loss; 2: L2-loss; all solved by dual formulation
+bias = 1;
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 params_A = 10.^[-5:4];
-epsilon = [0.1 1]; max_iter = 300; bias = 1;
+epsilon = [0.1 1]; max_iter = 300; 
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -59,7 +60,7 @@ for iter = 1:length(src.idx_cv)
         model = svmtrain(train_label, sparse(train_data_scaled),configuration);
         w = model.SVs' * model.sv_coef; b = -model.rho;    theta = [w(:); b];
     elseif solver == 2       % solver: liblinear
-        svm_param = [11 params_A(oter) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+        svm_param = [loss_func(option) params_A(oter) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
         configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
         model = train(train_label, sparse(train_data_scaled), configuration);
         theta = model.w(:);
@@ -101,6 +102,8 @@ else
 end
 params_A(opt)
 % retrain model using training + validation data
+dec_values_test = [];
+labels_test = [];
 for iter = 1:length(src.idx_test)
     inst_train = src.idx_test(iter).train;
     inst_test = src.idx_test(iter).validation;    %
@@ -125,7 +128,7 @@ for iter = 1:length(src.idx_test)
         model = svmtrain(train_label, sparse(train_data_scaled),configuration);
         w = model.SVs' * model.sv_coef; b = -model.rho;    theta = [w(:); b];
     elseif solver == 2       % solver: liblinear
-        svm_param = [11 params_A(opt) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
+        svm_param = [loss_func(option) params_A(opt) epsilon(1) bias]; % L2-regularized L2-loss(11,12) or L1-loss(13), cost coefficient 1, tolerance 0.1, bias coefficient 1
         configuration = sprintf('-s %d -c %f -p %f -B %d -q',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
         model = train(train_label, sparse(train_data_scaled), configuration);
         theta = model.w(:);
@@ -145,6 +148,8 @@ for iter = 1:length(src.idx_test)
     dec_values =theta'*[test_data; ones(1,size(test_data,2))];
     RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
     e = dec_values - test_label;
+    dec_values_test = [dec_values_test dec_values];
+    labels_test = [labels_test test_label];
     abs_test(iter) = sum(abs(e))/length(e);
     mse_test(iter) = e(:)'*e(:)/length(e);
     time = toc(tt);
@@ -170,4 +175,4 @@ mean(ry_test)
 mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias','svm_param');
+    'theta','ry_test','mse_test','abs_test','dec_values_test','labels_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias','svm_param');
