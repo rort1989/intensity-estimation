@@ -95,7 +95,8 @@ for iter = 1:length(src.idx_cv)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
-        test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
+        temp = bsxfun(@minus, test_data, scale_min);
+        test_data = bsxfun(@rdivide, temp, scale_max-scale_min);
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
@@ -183,7 +184,8 @@ for iter = 1:length(src.idx_test)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
-        test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
+        temp = bsxfun(@minus, test_data, scale_min);
+        test_data = bsxfun(@rdivide, temp, scale_max-scale_min);
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
     RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
