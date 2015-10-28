@@ -72,6 +72,7 @@ for iter = 1:length(src.idx_cv)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
+        temp = bsxfun(@minus, test_data, scale_min);
         test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
@@ -136,6 +137,7 @@ for iter = 1:length(src.idx_test)
         test_label = [test_label src.intensity{inst_test(n)}(:,2)']; % intensity
     end
     if scaled
+        temp = bsxfun(@minus, test_data, scale_min);
         test_data = bsxfun(@rdivide, test_data, scale_max-scale_min);
     end
     dec_values =theta'*[test_data; ones(1,size(test_data,2))];
@@ -165,5 +167,5 @@ end
 mean(ry_test)
 mean(mse_test)
 mean(abs_test)
-% save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-%     'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
+save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
+    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
