@@ -10,15 +10,16 @@ data = src.feature;
 labels = cell(1,numel(data));
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
-allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 scaled = 1;
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 option = 2;
+bias = 1;
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
 [params_A,params_B] = meshgrid(10.^[-2:3],10.^[-2:3]); %  -3:3  
-epsilon = [0.1 1]; max_iter = 300; rho = 0.1; bias = 1;
+epsilon = [0.1 1]; max_iter = 300; rho = 0.1; 
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -101,6 +102,8 @@ end
 gamma = [params_A(opt) params_B(opt)]
 lambda = 1 
 % retrain model using training + validation data
+dec_values_test = [];
+labels_test = [];
 for iter = 1:length(src.idx_test)
     inst_train = src.idx_test(iter).train;
     inst_test = src.idx_test(iter).validation; % train
@@ -143,6 +146,8 @@ for iter = 1:length(src.idx_test)
     dec_values =theta'*[test_data; ones(1,size(test_data,2))];
     RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
     e = dec_values - test_label;
+    dec_values_test = [dec_values_test dec_values];
+    labels_test = [labels_test test_label];
     abs_test(iter) = sum(abs(e))/length(e);
     mse_test(iter) = e(:)'*e(:)/length(e);
     time = toc(tt);
@@ -168,4 +173,4 @@ mean(ry_test)
 mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
+    'theta','ry_test','mse_test','abs_test','dec_values_test','labels_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
