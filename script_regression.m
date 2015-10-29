@@ -9,11 +9,11 @@ src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','df
 data = src.feature;
 labels = cell(1,numel(data));
 method = 3; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
-allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 scaled = 1;
-option = 0; % for bias
-max_iter = 300; bias = 0; 
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+option = 2; loss_func = [3 1]; % for svm loss function L1-loss or L2-loss
+bias = 1; max_iter = 300; 
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
@@ -35,22 +35,43 @@ for iter = 1:length(src.idx_cv)
     inst_test = src.idx_cv(iter).validation;
     % ordinal regression formulation: ordinal loss only with regularization
     N = length(inst_train);
-    train_data = [];
+    train_data = []; % for liblinear or libsvm
+    train_data_ori = [];
+    train_data_aug = [];
     train_label = [];
+    ordinal_label = [];
+    qid = [];
     % formalize the pairwise data
+    count_qid = 0;
     for n = 1:N
+        train_data_ori = [train_data_ori data{inst_train(n)}];
+    end
+    if scaled
+        scale_max = max(train_data_ori,[],2);
+        scale_min = min(train_data_ori,[],2);        
+    end
+    for n = 1:N
+        data_buffer = data{inst_train(n)};
+        if scaled
+            temp = bsxfun(@minus, data_buffer, scale_min); %data_together % ATTENTION: NOT data_together
+            data_buffer = bsxfun(@rdivide, temp, scale_max-scale_min);
+        end
         peak = max(labels{inst_train(n)}(:,2)); % index of apex frame
         idx = find(labels{inst_train(n)}(:,2)==peak);
         apx = labels{inst_train(n)}(idx(max(1,ceil(length(idx)/2))),1);
-        [~,T] = size(data{inst_train(n)});
+        [~,T] = size(data_buffer);        
         pairs = zeros(T*(T+1)/2,2);
-        count = 0;
+        count = 0;        
         for i = apx:-1:2
             pairs(count+1:count+i-1,1) = i;
             pairs(count+1:count+i-1,2) = [i-1:-1:1]';
             count = count + i-1;
         end
-        train_label = [train_label; ones(count,1)];
+        train_label = [train_label; ones(count,1)];  
+        qid = [qid; (count_qid+1)*ones(apx,1)]; % change here in case does not support one instance qid case
+        ordinal_label = [ordinal_label; (1:apx)']; 
+        train_data_aug = [train_data_aug data_buffer(:,1:apx)];
+        count_qid = count_qid + 1;
         count_half = count;
         if apx < T
             for i = apx:T
@@ -58,32 +79,31 @@ for iter = 1:length(src.idx_cv)
                 pairs(count+1:count+T-i,2) = [i+1:T]';
                 count = count + T-i;
             end
+            qid = [qid; (count_qid+1)*ones(T-apx+1,1)]; % change here in case does not support one instance qid case
+            ordinal_label = [ordinal_label; (T-apx+1:-1:1)']; 
+            train_data_aug = [train_data_aug data_buffer(:,apx:T)];
+            count_qid = count_qid + 1;
         end
         pairs = pairs(1:count,:);
-        train_data = [train_data data{inst_train(n)}(:,pairs(:,1)) - data{inst_train(n)}(:,pairs(:,2))];
+        train_data = [train_data data_buffer(:,pairs(:,1)) - data_buffer(:,pairs(:,2))];
         train_label = [train_label; 2*ones(count-count_half,1)];
-    end
-    % optional scaling may be performed
-    if scaled
-        scale_max = max(train_data,[],2);
-        scale_min = min(train_data,[],2);
-        temp = bsxfun(@minus, train_data, scale_min); %data_together % ATTENTION: NOT data_together
-        train_data_scaled = bsxfun(@rdivide, temp, scale_max-scale_min); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
-    else
-        train_data_scaled = train_data;
-    end
+    end    
+    % if size(train_data_aug,2)~=length(qid) || size(train_data_aug,2)~=length(ordinal_label) || max(qid) ~= count_qid
+
     % define initial parameter of regression model    
     if solver == 1% solver: libsvm
         svm_param = [0 0 1 1]; % L2-regularized hinge loss, cost coefficient 1
         configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-        model = svmtrain(train_label, sparse(train_data_scaled'),configuration);
+        model = svmtrain(train_label, sparse(train_data'),configuration);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
         theta = [w(:); b];        
     elseif solver == 2        % solver: liblinear
-        svm_param = [2 params_A(oter) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
+        svm_param = [loss_func(option) params_A(oter) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
-        model = train(train_label, sparse(train_data_scaled'),configuration);
+        model = train(train_label, sparse(train_data'),configuration);
         theta = [model.w(:)];
+    elseif solver == 3   % solver: rank-svm
+        train_data_aug = [ordinal_label'; qid'; train_data_aug];    
     end
     
     %% validation: compute the prediction intensity given testing frame and learned model
@@ -98,7 +118,13 @@ for iter = 1:length(src.idx_cv)
         temp = bsxfun(@minus, test_data, scale_min);
         test_data = bsxfun(@rdivide, temp, scale_max-scale_min);
     end
-    dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
+    if solver < 3
+        dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
+    else % solver: rank-svm
+        test_data_aug = [1:size(test_data,2); ones(1,size(test_data,2)); test_data];
+        params = sprintf('-c %f -e 0.1',params_A(oter));
+        dec_values = svmrank(train_data_aug',test_data_aug',params);  dec_values = dec_values';
+    end
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
     e = dec_values - test_label;
     mse = e(:)'*e(:)/length(e);
@@ -122,26 +148,49 @@ else
 end
 params_A(opt)
 % retrain model using training + validation data
+dec_values_test = [];
+labels_test = [];
 for iter = 1:length(src.idx_test)    
     inst_train = src.idx_test(iter).train;
     inst_test = src.idx_test(iter).validation; %train
     N = length(inst_train);
-    train_data = [];
+    train_data = []; % for liblinear or libsvm
+    train_data_ori = [];
+    train_data_aug = [];
     train_label = [];
+    ordinal_label = [];
+    qid = [];
     % formalize the pairwise data
+    count_qid = 0;
     for n = 1:N
+        train_data_ori = [train_data_ori data{inst_train(n)}];
+    end
+    if scaled
+        scale_max = max(train_data_ori,[],2);
+        scale_min = min(train_data_ori,[],2);        
+    end
+    for n = 1:N
+        data_buffer = data{inst_train(n)};
+        if scaled
+            temp = bsxfun(@minus, data_buffer, scale_min); %data_together % ATTENTION: NOT data_together
+            data_buffer = bsxfun(@rdivide, temp, scale_max-scale_min);
+        end
         peak = max(labels{inst_train(n)}(:,2)); % index of apex frame
         idx = find(labels{inst_train(n)}(:,2)==peak);
         apx = labels{inst_train(n)}(idx(max(1,ceil(length(idx)/2))),1);
-        [~,T] = size(data{inst_train(n)});
+        [~,T] = size(data_buffer);        
         pairs = zeros(T*(T+1)/2,2);
-        count = 0;
+        count = 0;        
         for i = apx:-1:2
             pairs(count+1:count+i-1,1) = i;
             pairs(count+1:count+i-1,2) = [i-1:-1:1]';
             count = count + i-1;
-        end        
-        train_label = [train_label; ones(count,1)];
+        end
+        train_label = [train_label; ones(count,1)];  
+        qid = [qid; (count_qid+1)*ones(apx,1)]; % change here in case does not support one instance qid case
+        ordinal_label = [ordinal_label; (1:apx)']; 
+        train_data_aug = [train_data_aug data_buffer(:,1:apx)];
+        count_qid = count_qid + 1;
         count_half = count;
         if apx < T
             for i = apx:T
@@ -149,32 +198,30 @@ for iter = 1:length(src.idx_test)
                 pairs(count+1:count+T-i,2) = [i+1:T]';
                 count = count + T-i;
             end
+            qid = [qid; (count_qid+1)*ones(T-apx+1,1)]; % change here in case does not support one instance qid case
+            ordinal_label = [ordinal_label; (T-apx+1:-1:1)']; 
+            train_data_aug = [train_data_aug data_buffer(:,apx:T)];
+            count_qid = count_qid + 1;
         end
         pairs = pairs(1:count,:);
-        train_data = [train_data data{inst_train(n)}(:,pairs(:,1)) - data{inst_train(n)}(:,pairs(:,2))];
+        train_data = [train_data data_buffer(:,pairs(:,1)) - data_buffer(:,pairs(:,2))];
         train_label = [train_label; 2*ones(count-count_half,1)];
     end
-    % optional scaling may be performed
-    if scaled
-        scale_max = max(train_data,[],2);
-        scale_min = min(train_data,[],2);
-        temp = bsxfun(@minus, train_data, scale_min); %data_together % ATTENTION: NOT data_together
-        train_data_scaled = bsxfun(@rdivide, temp, scale_max-scale_min); %train_data % try a different way of scaling, scale train data first then use the same number to scale test data
-    else
-        train_data_scaled = train_data;
-    end
+    
     % define initial parameter of regression model    
     if solver == 1% solver: libsvm
         svm_param = [0 0 1 1]; % L2-regularized hinge loss, cost coefficient 1
         configuration = sprintf('-s %d -t %d -g %f -c %f',svm_param(1),svm_param(2),svm_param(3),svm_param(4));
-        model = svmtrain(train_label, sparse(train_data_scaled'),configuration);
+        model = svmtrain(train_label, sparse(train_data'),configuration);
         w = model.SVs' * model.sv_coef;        b = -model.rho;
         theta = [w(:); b];        
     elseif solver == 2        % solver: liblinear
-        svm_param = [2 params_A(opt) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
+        svm_param = [loss_func(option) params_A(opt) bias]; % L2-regularized logistic regression (0,7) or square loss (2,1) hinge loss (3), cost coefficient 1, bias coefficient -1
         configuration = sprintf('-s %d -c %f -B %d',svm_param(1),svm_param(2),svm_param(3));
-        model = train(train_label, sparse(train_data_scaled'),configuration);
-        theta = [model.w(:)];
+        model = train(train_label, sparse(train_data'),configuration);
+        theta = [model.w(:)];    
+    elseif solver == 3   % solver: rank-svm
+        train_data_aug = [ordinal_label'; qid'; train_data_aug];
     end
     % testing
     test_data = [];
@@ -187,9 +234,17 @@ for iter = 1:length(src.idx_test)
         temp = bsxfun(@minus, test_data, scale_min);
         test_data = bsxfun(@rdivide, temp, scale_max-scale_min);
     end
-    dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
+    if solver < 3        
+        dec_values =theta'*[test_data; ones(1,size(test_data,2))];         
+    else % solver: rank-svm
+        test_data_aug = [1:size(test_data,2); ones(1,size(test_data,2)); test_data];
+        params = sprintf('-c %f -e 0.1',params_A(opt));
+        dec_values = svmrank(train_data_aug',test_data_aug',params); dec_values = dec_values';
+    end
     RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
     e = dec_values - test_label;
+    dec_values_test = [dec_values_test dec_values];
+    labels_test = [labels_test test_label];
     abs_test(iter) = sum(abs(e))/length(e);
     mse = e(:)'*e(:)/length(e);
     mse_test(iter) = mse;
@@ -216,4 +271,4 @@ mean(ry_test)
 mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','svm_param','inst_train','inst_test','bias');
+    'theta','ry_test','mse_test','abs_test','dec_values_test','labels_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','svm_param','inst_train','inst_test','bias');
