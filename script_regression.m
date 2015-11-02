@@ -9,7 +9,7 @@ src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','df
 data = src.feature;
 labels = cell(1,numel(data));
 method = 3; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 scaled = 1;
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 option = 2; loss_func = [3 1]; % for svm loss function L1-loss or L2-loss
@@ -259,11 +259,11 @@ display('testing completed');
 
 %% plot concatenate seq
 if solver == 3
-    figure
-    subplot(2,1,1)
-    loglog(1:history.iter,history.s_norm,1:history.iter,history.eps_dual,'r'); title('dual feasibility')
-    subplot(2,1,2)
-    loglog(1:history.iter,history.r_norm,1:history.iter,history.eps_pri,'r'); title('primal feasibility')
+%     figure
+%     subplot(2,1,1)
+%     loglog(1:history.iter,history.s_norm,1:history.iter,history.eps_dual,'r'); title('dual feasibility')
+%     subplot(2,1,2)
+%     loglog(1:history.iter,history.r_norm,1:history.iter,history.eps_pri,'r'); title('primal feasibility')
 end
  
 %% save results
@@ -271,4 +271,7 @@ mean(ry_test)
 mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
-    'theta','ry_test','mse_test','abs_test','dec_values_test','labels_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','svm_param','inst_train','inst_test','bias');
+    'ry_test','mse_test','abs_test','dec_values_test','labels_test','ry_fold','mse_fold','abs_fold','time','time_validation','solver','scaled','allframes','params_A','inst_train','inst_test','bias');
+if solver < 3
+   save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias),'theta','svm_param','-append');
+end
