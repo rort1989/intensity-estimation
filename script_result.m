@@ -52,3 +52,53 @@ end
 % plot(intensity); title('intensity level of selected AU')
 % subplot(2,1,2)
 % plot(dec_values); title('intensity from learned regression model')
+
+%% average results of leave-one-subject-out test
+clear all;
+method = 2;
+solver = 2;
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+scaled = 1;
+option = 1;
+bias = 1;
+num_exp = 6;
+results_mat = zeros(6,num_exp+1);
+for express = 1:num_exp %CK+
+    src = load(sprintf('BU4DEF/results/PCA_ALL/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d_exp%d.mat',method,solver,scaled,allframes,option,bias,express));
+    % average within each subjects
+    results_mat(1,express) = mean(src.ry_test);
+    results_mat(2,express) = mean(src.mse_test);
+    results_mat(3,express) = mean(src.abs_test);
+    % average across different subjects
+    e = src.dec_values_test - src.labels_test;    
+    results_mat(4,express) = mean((src.dec_values_test-mean(src.dec_values_test)).*(src.labels_test-mean(src.labels_test)))/std(src.dec_values_test,1)/std(src.labels_test,1);
+    results_mat(5,express) = e(:)'*e(:)/length(e);
+    results_mat(6,express) = sum(abs(e))/length(e);
+end
+results_mat(:,num_exp+1) = mean(results_mat(:,1:num_exp),2);
+% save(sprintf('BU4DEF/results/m%d_sol%d_scale%d_all%d_opt%d_bias%d_exp%d.mat',method,solver,scaled,allframes,option,bias,express),'results_mat');
+
+%% average results of leave-one-subject-out test
+% clear all;
+method = 3;
+solver = 3;
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
+scaled = 1;
+option = 1;
+bias = 1;
+num_exp = 0;
+results_mat = zeros(6,num_exp+1);
+for express = 1%:num_exp %
+    src = load(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias));
+    % average within each subjects
+    results_mat(1,express) = mean(src.ry_test);
+    results_mat(2,express) = mean(src.mse_test);
+    results_mat(3,express) = mean(src.abs_test);
+    % average across different subjects
+    e = src.dec_values_test - src.labels_test;    
+    results_mat(4,express) = mean((src.dec_values_test-mean(src.dec_values_test)).*(src.labels_test-mean(src.labels_test)))/std(src.dec_values_test,1)/std(src.labels_test,1);
+    results_mat(5,express) = e(:)'*e(:)/length(e);
+    results_mat(6,express) = sum(abs(e))/length(e);
+end
+% results_mat(:,num_exp+1) = mean(results_mat(:,1:num_exp),2);
+% save(sprintf('BU4DEF/results/m%d_sol%d_scale%d_all%d_opt%d_bias%d_exp%d.mat',method,solver,scaled,allframes,option,bias,express),'results_mat');

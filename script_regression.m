@@ -3,15 +3,15 @@ clear all;
 close all;
 tt = tic;
 %% load data
-src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','dfactor'); % ,'intensity'
-
+src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','dfactor','idx_test_loso'); % ,'intensity'
+src.idx_test = src.idx_test_loso;
 % define constants
 data = src.feature;
 labels = cell(1,numel(data));
 method = 1; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
 solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 scaled = 1;
-allframes = 1; % 0: use only apex and begin/end frames in labels; 1: use all frames
+allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
 option = 2;
 bias = 1;
 options = optimset('GradObj','on','LargeScale','off','MaxIter',1000); theta0 = zeros(size(data{1},1)+1,1);
@@ -174,3 +174,5 @@ mean(mse_test)
 mean(abs_test)
 save(sprintf('McMaster/results/exSTD_m%d_sol%d_scale%d_all%d_opt%d_bias%d.mat',method,solver,scaled,allframes,option,bias), ...
     'theta','ry_test','mse_test','abs_test','dec_values_test','labels_test','ry_fold','mse_fold','abs_fold','iters_fold','time','time_validation','solver','scaled','allframes','params_A','params_B','gamma','inst_train','inst_test','rho','lambda','bias');
+% mean((dec_values_test-mean(dec_values_test)).*(labels_test-mean(labels_test)))/std(dec_values_test,1)/std(labels_test,1)
+% sum(abs(dec_values_test - labels_test))/length(dec_values_test)
