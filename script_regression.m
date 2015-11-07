@@ -9,15 +9,15 @@ src = load('McMaster/standard.mat','feature','intensity','idx_cv','idx_test','df
 data = src.feature;
 labels = cell(1,numel(data));
 method = 3; % 1. both regression and ordinal loss  2. regression loss only 3. ordinal loss only
-solver = 2; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
+solver = 3; % with method 2 or 3, can choose whether using libsvm or liblinear to solve
 scaled = 1;
 allframes = 0; % 0: use only apex and begin/end frames in labels; 1: use all frames
-option = 2; loss_func = [3 1]; % for svm loss function L1-loss or L2-loss
-bias = 1; max_iter = 300; 
+option = 1; loss_func = [3 1]; % for svm loss function L1-loss or L2-loss
+bias = 0; max_iter = 300; 
 
 %% parameter tuning using validation data: things to vary: params range, scaled, bias, peak position: first or last
 % grid search for parameters: support up to 2 varing parameters
-params_A = 10.^[-5:4];
+params_A = 10.^[-2:3];%:4
 if ~allframes
     for n = 1:numel(data)
         labels{n}(1,:) = src.intensity{n}(1,:);
@@ -122,7 +122,7 @@ for iter = 1:length(src.idx_cv)
         dec_values =theta'*[test_data; ones(1,size(test_data,2))]; %
     else % solver: rank-svm
         test_data_aug = [1:size(test_data,2); ones(1,size(test_data,2)); test_data];
-        params = sprintf('-c %f -e 0.1',params_A(oter));
+        params = sprintf('-c %f -p %d',params_A(oter),option);
         dec_values = svmrank(train_data_aug',test_data_aug',params);  dec_values = dec_values';
     end
     RR = corrcoef(dec_values,test_label);  ry = RR(1,2);
@@ -238,7 +238,7 @@ for iter = 1:length(src.idx_test)
         dec_values =theta'*[test_data; ones(1,size(test_data,2))];         
     else % solver: rank-svm
         test_data_aug = [1:size(test_data,2); ones(1,size(test_data,2)); test_data];
-        params = sprintf('-c %f -e 0.1',params_A(opt));
+        params = sprintf('-c %f -p %d',params_A(opt),option);
         dec_values = svmrank(train_data_aug',test_data_aug',params); dec_values = dec_values';
     end
     RR = corrcoef(dec_values,test_label);  ry_test(iter) = RR(1,2);
